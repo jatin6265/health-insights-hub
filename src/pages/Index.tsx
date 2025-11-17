@@ -10,15 +10,18 @@ import { HealthScore } from "@/components/HealthScore";
 import { ActivityLog } from "@/components/ActivityLog";
 import { InsightsPanel } from "@/components/InsightsPanel";
 import { DataCollection } from "@/components/DataCollection";
+import { useHealthData } from "@/hooks/useHealthData";
 import { toast } from "sonner";
 
 const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
   const [mentalHealthScore, setMentalHealthScore] = useState(72);
   const [physicalHealthScore, setPhysicalHealthScore] = useState(68);
   const [sensitivityLevel, setSensitivityLevel] = useState("Moderate");
   const navigate = useNavigate();
+  const { fetchSleepData, dataSources } = useHealthData();
 
   useEffect(() => {
     // Check authentication
@@ -58,6 +61,33 @@ const Index = () => {
     toast.success("Signed out successfully");
   };
 
+  const handleAnalyzeSleep = async () => {
+    const hasPermissions = dataSources.some(source => source.permission);
+    
+    if (!hasPermissions) {
+      toast.error("Please grant health data access first", {
+        description: "Scroll down to connect your health data"
+      });
+      return;
+    }
+
+    setAnalyzing(true);
+    
+    try {
+      const sleepData = await fetchSleepData(7);
+      
+      // Here we'll call the Edge Function in Task 3
+      // For now, just show a success message
+      toast.success("Sleep data analyzed!", {
+        description: `Average: ${sleepData.averageHours} hours over ${sleepData.nights} nights`
+      });
+    } catch (error) {
+      toast.error("Failed to analyze sleep data");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-calm-gradient flex items-center justify-center">
@@ -82,9 +112,14 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" className="bg-wellness-gradient">
+              <Button 
+                size="sm" 
+                className="bg-wellness-gradient"
+                onClick={handleAnalyzeSleep}
+                disabled={analyzing}
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Log Activity
+                {analyzing ? "Analyzing..." : "Analyze Sleep"}
               </Button>
               <Button size="sm" variant="ghost" onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />

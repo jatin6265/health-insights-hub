@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { Activity, Brain, Heart, TrendingUp, Zap, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Activity, Brain, Heart, TrendingUp, Zap, Plus, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { User } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,16 +13,58 @@ import { DataCollection } from "@/components/DataCollection";
 import { toast } from "sonner";
 
 const Index = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [mentalHealthScore, setMentalHealthScore] = useState(72);
   const [physicalHealthScore, setPhysicalHealthScore] = useState(68);
   const [sensitivityLevel, setSensitivityLevel] = useState("Moderate");
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // Simulate data collection initialization
-    toast.success("Health monitoring active", {
-      description: "Data collection started successfully"
+    // Check authentication
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      setUser(session.user);
+      setLoading(false);
+
+      toast.success("Health monitoring active", {
+        description: "Data collection started successfully"
+      });
+    };
+
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setUser(session.user);
+        setLoading(false);
+      }
     });
-  }, []);
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out successfully");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-calm-gradient flex items-center justify-center">
+        <div className="text-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-calm-gradient">
@@ -36,10 +81,16 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">AI-Powered Health Tracking</p>
               </div>
             </div>
-            <Button size="sm" className="bg-wellness-gradient">
-              <Plus className="w-4 h-4 mr-2" />
-              Log Activity
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="bg-wellness-gradient">
+                <Plus className="w-4 h-4 mr-2" />
+                Log Activity
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleSignOut}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>

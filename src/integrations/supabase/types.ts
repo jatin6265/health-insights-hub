@@ -14,30 +14,327 @@ export type Database = {
   }
   public: {
     Tables: {
+      attendance: {
+        Row: {
+          created_at: string
+          duration_minutes: number | null
+          id: string
+          ip_address: string | null
+          join_time: string | null
+          leave_time: string | null
+          qr_token_used: string | null
+          session_id: string
+          status: Database["public"]["Enums"]["attendance_status"] | null
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          ip_address?: string | null
+          join_time?: string | null
+          leave_time?: string | null
+          qr_token_used?: string | null
+          session_id: string
+          status?: Database["public"]["Enums"]["attendance_status"] | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          ip_address?: string | null
+          join_time?: string | null
+          leave_time?: string | null
+          qr_token_used?: string | null
+          session_id?: string
+          status?: Database["public"]["Enums"]["attendance_status"] | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip_address: string | null
+          new_values: Json | null
+          old_values: Json | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean | null
+          link: string | null
+          message: string
+          title: string
+          type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message: string
+          title: string
+          type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message?: string
+          title?: string
+          type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           avatar_url: string | null
           created_at: string
+          department: string | null
           email: string | null
           full_name: string | null
           id: string
+          phone: string | null
+          status: Database["public"]["Enums"]["user_status"]
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           avatar_url?: string | null
           created_at?: string
+          department?: string | null
           email?: string | null
           full_name?: string | null
           id: string
+          phone?: string | null
+          status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           avatar_url?: string | null
           created_at?: string
+          department?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
+          phone?: string | null
+          status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      session_participants: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          actual_end_time: string | null
+          actual_start_time: string | null
+          created_at: string
+          description: string | null
+          end_time: string
+          id: string
+          late_threshold_minutes: number | null
+          location: string | null
+          qr_expires_at: string | null
+          qr_token: string | null
+          scheduled_date: string
+          start_time: string
+          status: Database["public"]["Enums"]["session_status"] | null
+          title: string
+          trainer_id: string | null
+          training_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual_end_time?: string | null
+          actual_start_time?: string | null
+          created_at?: string
+          description?: string | null
+          end_time: string
+          id?: string
+          late_threshold_minutes?: number | null
+          location?: string | null
+          qr_expires_at?: string | null
+          qr_token?: string | null
+          scheduled_date: string
+          start_time: string
+          status?: Database["public"]["Enums"]["session_status"] | null
+          title: string
+          trainer_id?: string | null
+          training_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual_end_time?: string | null
+          actual_start_time?: string | null
+          created_at?: string
+          description?: string | null
+          end_time?: string
+          id?: string
+          late_threshold_minutes?: number | null
+          location?: string | null
+          qr_expires_at?: string | null
+          qr_token?: string | null
+          scheduled_date?: string
+          start_time?: string
+          status?: Database["public"]["Enums"]["session_status"] | null
+          title?: string
+          trainer_id?: string | null
+          training_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_training_id_fkey"
+            columns: ["training_id"]
+            isOneToOne: false
+            referencedRelation: "trainings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trainings: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          start_date: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          start_date?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -46,10 +343,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_user_active: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "trainer" | "trainee"
+      attendance_status: "present" | "late" | "partial" | "absent"
+      session_status: "scheduled" | "active" | "completed" | "cancelled"
+      user_status: "pending" | "active" | "inactive" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -176,6 +487,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "trainer", "trainee"],
+      attendance_status: ["present", "late", "partial", "absent"],
+      session_status: ["scheduled", "active", "completed", "cancelled"],
+      user_status: ["pending", "active", "inactive", "rejected"],
+    },
   },
 } as const

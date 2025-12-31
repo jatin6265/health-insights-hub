@@ -1,1 +1,7 @@
 project_id = "uoemijylmpzggpnknmdw"
+
+[functions.mark-attendance]
+verify_jwt = false
+
+[functions.create-admin]
+verify_jwt = false

@@ -5,6 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Calendar,
   QrCode,
   Clock,
@@ -12,10 +18,12 @@ import {
   XCircle,
   AlertCircle,
   Scan,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus, Attendance, AttendanceStatus } from '@/types/auth';
 import { useAuth } from '@/hooks/useAuth';
+import { QRScanner } from '@/components/attendance/QRScanner';
 
 interface SessionWithAttendance extends Session {
   training?: {
@@ -34,6 +42,7 @@ export function TraineeDashboard() {
     attendanceRate: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -87,6 +96,7 @@ export function TraineeDashboard() {
       const sessionsWithAttendance: SessionWithAttendance[] = (sessionsData || []).map(s => ({
         ...s,
         status: s.status as SessionStatus,
+        late_threshold_minutes: s.late_threshold_minutes ?? 15,
         training: s.trainings as { title: string } | undefined,
         attendance: attendanceMap.get(s.id) as Attendance | undefined,
       }));
@@ -111,6 +121,37 @@ export function TraineeDashboard() {
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleScan = async (token: string, sessionId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      
+      if (!authSession?.access_token) {
+        return { success: false, message: 'Please log in to mark attendance' };
+      }
+
+      const response = await supabase.functions.invoke('mark-attendance', {
+        body: { token, sessionId },
+      });
+
+      if (response.error) {
+        return { success: false, message: response.error.message || 'Failed to mark attendance' };
+      }
+
+      const result = response.data;
+      
+      if (result.success) {
+        toast.success(result.message);
+        fetchTraineeData(); // Refresh data
+        setShowScanner(false);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      return { success: false, message: 'Failed to mark attendance' };
     }
   };
 
@@ -181,6 +222,22 @@ export function TraineeDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Scan Button - Prominent */}
+      <Card className="p-6 bg-primary/5 border-primary/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Mark Attendance</h2>
+            <p className="text-sm text-muted-foreground">
+              Scan the QR code displayed by your trainer
+            </p>
+          </div>
+          <Button size="lg" onClick={() => setShowScanner(true)}>
+            <QrCode className="w-5 h-5 mr-2" />
+            Scan QR Code
+          </Button>
+        </div>
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-6">
@@ -256,7 +313,7 @@ export function TraineeDashboard() {
                   {session.attendance ? (
                     getAttendanceBadge(session.attendance.status as AttendanceStatus)
                   ) : (
-                    <Button>
+                    <Button onClick={() => setShowScanner(true)}>
                       <Scan className="w-4 h-4 mr-2" />
                       Scan QR
                     </Button>
@@ -290,6 +347,12 @@ export function TraineeDashboard() {
                   <p className="text-sm text-muted-foreground">
                     {session.training?.title} • {session.scheduled_date} • {session.start_time}
                   </p>
+                  {session.location && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {session.location}
+                    </p>
+                  )}
                 </div>
                 {getSessionStatusBadge(session.status)}
               </div>
@@ -327,6 +390,16 @@ export function TraineeDashboard() {
           </div>
         )}
       </Card>
+
+      {/* QR Scanner Dialog */}
+      <Dialog open={showScanner} onOpenChange={setShowScanner}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Scan Attendance QR</DialogTitle>
+          </DialogHeader>
+          <QRScanner onScan={handleScan} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

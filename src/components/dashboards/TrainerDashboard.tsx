@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus } from '@/types/auth';
-import { useAuth } from '@/hooks/useAuth';
+import { QRCodeDisplay } from '@/components/attendance/QRCodeDisplay';
 
 interface SessionWithDetails extends Session {
   training?: {
@@ -34,6 +35,7 @@ export function TrainerDashboard() {
     totalParticipants: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [qrSession, setQrSession] = useState<SessionWithDetails | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -72,6 +74,7 @@ export function TrainerDashboard() {
       const sessionsWithDetails: SessionWithDetails[] = (sessionsData || []).map(s => ({
         ...s,
         status: s.status as SessionStatus,
+        late_threshold_minutes: s.late_threshold_minutes ?? 15,
         training: s.trainings as { title: string } | undefined,
         participant_count: countMap.get(s.id) || 0,
       }));
@@ -166,6 +169,30 @@ export function TrainerDashboard() {
     } catch (error) {
       console.error('Error ending session:', error);
       toast.error('Failed to end session');
+    }
+  };
+
+  const handleRefreshQR = async (sessionId: string) => {
+    try {
+      const qrToken = crypto.randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 4);
+
+      const { error } = await supabase
+        .from('sessions')
+        .update({
+          qr_token: qrToken,
+          qr_expires_at: expiresAt.toISOString(),
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast.success('QR code refreshed');
+      fetchTrainerData();
+    } catch (error) {
+      console.error('Error refreshing QR:', error);
+      toast.error('Failed to refresh QR code');
     }
   };
 
@@ -295,7 +322,11 @@ export function TrainerDashboard() {
                   )}
                   {session.status === 'active' && (
                     <>
-                      <Button size="sm" variant="outline">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setQrSession(session)}
+                      >
                         <QrCode className="w-4 h-4 mr-1" />
                         View QR
                       </Button>
@@ -315,6 +346,19 @@ export function TrainerDashboard() {
           </div>
         )}
       </Card>
+
+      {/* QR Code Dialog */}
+      {qrSession && (
+        <QRCodeDisplay
+          sessionId={qrSession.id}
+          sessionTitle={qrSession.title}
+          qrToken={qrSession.qr_token}
+          expiresAt={qrSession.qr_expires_at}
+          isOpen={!!qrSession}
+          onClose={() => setQrSession(null)}
+          onRefresh={() => handleRefreshQR(qrSession.id)}
+        />
+      )}
     </div>
   );
 }

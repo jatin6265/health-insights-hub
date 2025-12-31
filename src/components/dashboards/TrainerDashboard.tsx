@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -251,9 +252,11 @@ export function TrainerDashboard() {
             <Calendar className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Your Sessions</h2>
           </div>
-          <Button size="sm">
-            <PlusCircle className="w-4 h-4 mr-2" />
-            New Session
+          <Button size="sm" asChild>
+            <Link to="/training">
+              <PlusCircle className="w-4 h-4 mr-2" />
+              New Session
+            </Link>
           </Button>
         </div>
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +23,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { UserWithRole, AppRole, UserStatus } from '@/types/auth';
+import { AppRole, UserStatus } from '@/types/auth';
 
 interface PendingUser {
   id: string;
@@ -310,13 +311,17 @@ export function AdminDashboard() {
           <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2">
-            <GraduationCap className="w-6 h-6" />
-            <span>Create Training Program</span>
+          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
+            <Link to="/training">
+              <GraduationCap className="w-6 h-6" />
+              <span>Create Training Program</span>
+            </Link>
           </Button>
-          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2">
-            <Calendar className="w-6 h-6" />
-            <span>Schedule Session</span>
+          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
+            <Link to="/training">
+              <Calendar className="w-6 h-6" />
+              <span>Schedule Session</span>
+            </Link>
           </Button>
           <Button variant="outline" className="h-auto py-4 flex flex-col gap-2">
             <Users className="w-6 h-6" />

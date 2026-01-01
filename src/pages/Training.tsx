@@ -3,7 +3,8 @@ import { Navigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrainingManagement } from '@/components/training/TrainingManagement';
 import { SessionManagement } from '@/components/training/SessionManagement';
-import { GraduationCap, Calendar, ArrowLeft } from 'lucide-react';
+import { ParticipantManagement } from '@/components/training/ParticipantManagement';
+import { GraduationCap, Calendar, Users, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
@@ -43,7 +44,7 @@ export default function Training() {
         </div>
 
         <Tabs defaultValue="trainings" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="trainings" className="flex items-center gap-2">
               <GraduationCap className="w-4 h-4" />
               Programs
@@ -51,6 +52,10 @@ export default function Training() {
             <TabsTrigger value="sessions" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               Sessions
+            </TabsTrigger>
+            <TabsTrigger value="participants" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Participants
             </TabsTrigger>
           </TabsList>
 
@@ -60,6 +65,10 @@ export default function Training() {
 
           <TabsContent value="sessions">
             <SessionManagement />
+          </TabsContent>
+
+          <TabsContent value="participants">
+            <ParticipantManagement />
           </TabsContent>
         </Tabs>
       </div>

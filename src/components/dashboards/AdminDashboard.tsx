@@ -21,6 +21,7 @@ import {
   Calendar,
   Shield,
   TrendingUp,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, UserStatus } from '@/types/auth';
@@ -310,7 +311,7 @@ export function AdminDashboard() {
           <TrendingUp className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
             <Link to="/training">
               <GraduationCap className="w-6 h-6" />
@@ -323,9 +324,17 @@ export function AdminDashboard() {
               <span>Schedule Session</span>
             </Link>
           </Button>
-          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2">
-            <Users className="w-6 h-6" />
-            <span>Manage Users</span>
+          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
+            <Link to="/training">
+              <Users className="w-6 h-6" />
+              <span>Manage Participants</span>
+            </Link>
+          </Button>
+          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
+            <Link to="/reports">
+              <BarChart3 className="w-6 h-6" />
+              <span>View Reports</span>
+            </Link>
           </Button>
         </div>
       </Card>

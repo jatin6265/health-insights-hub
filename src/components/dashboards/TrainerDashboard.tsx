@@ -13,6 +13,7 @@ import {
   CheckCircle,
   PlayCircle,
   PlusCircle,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus } from '@/types/auth';
@@ -279,12 +280,20 @@ export function TrainerDashboard() {
             <Calendar className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Your Sessions</h2>
           </div>
-          <Button size="sm" asChild>
-            <Link to="/training">
-              <PlusCircle className="w-4 h-4 mr-2" />
-              New Session
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/reports">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Reports
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link to="/training">
+                <PlusCircle className="w-4 h-4 mr-2" />
+                New Session
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {sessions.length === 0 ? (

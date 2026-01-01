@@ -311,7 +311,7 @@ export function AdminDashboard() {
           <TrendingUp className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
             <Link to="/training">
               <GraduationCap className="w-6 h-6" />
@@ -328,6 +328,12 @@ export function AdminDashboard() {
             <Link to="/training">
               <Users className="w-6 h-6" />
               <span>Manage Participants</span>
+            </Link>
+          </Button>
+          <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>
+            <Link to="/users">
+              <Shield className="w-6 h-6" />
+              <span>User Management</span>
             </Link>
           </Button>
           <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" asChild>

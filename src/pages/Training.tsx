@@ -4,7 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrainingManagement } from '@/components/training/TrainingManagement';
 import { SessionManagement } from '@/components/training/SessionManagement';
 import { ParticipantManagement } from '@/components/training/ParticipantManagement';
-import { GraduationCap, Calendar, Users, ArrowLeft } from 'lucide-react';
+import { SessionCalendar } from '@/components/training/SessionCalendar';
+import { GraduationCap, Calendar, Users, ArrowLeft, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
@@ -44,18 +45,22 @@ export default function Training() {
         </div>
 
         <Tabs defaultValue="trainings" className="space-y-6">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="trainings" className="flex items-center gap-2">
               <GraduationCap className="w-4 h-4" />
-              Programs
+              <span className="hidden sm:inline">Programs</span>
             </TabsTrigger>
             <TabsTrigger value="sessions" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              Sessions
+              <span className="hidden sm:inline">Sessions</span>
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" />
+              <span className="hidden sm:inline">Calendar</span>
             </TabsTrigger>
             <TabsTrigger value="participants" className="flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Participants
+              <span className="hidden sm:inline">Participants</span>
             </TabsTrigger>
           </TabsList>
 
@@ -65,6 +70,10 @@ export default function Training() {
 
           <TabsContent value="sessions">
             <SessionManagement />
+          </TabsContent>
+
+          <TabsContent value="calendar">
+            <SessionCalendar />
           </TabsContent>
 
           <TabsContent value="participants">

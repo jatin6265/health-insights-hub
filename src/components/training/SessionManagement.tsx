@@ -36,6 +36,8 @@ import {
   MapPin,
   MoreVertical,
   User,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -59,6 +61,7 @@ export function SessionManagement() {
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [deletingSession, setDeletingSession] = useState<Session | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSessions();
@@ -226,6 +229,31 @@ export function SessionManagement() {
     setIsFormOpen(false);
   };
 
+  const handleSendReminder = async (sessionId: string) => {
+    setSendingReminder(sessionId);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-notification', {
+        body: {
+          type: 'session_reminder',
+          sessionId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(data.message || 'Reminders sent successfully');
+      } else {
+        toast.error(data?.message || 'Failed to send reminders');
+      }
+    } catch (error) {
+      console.error('Error sending reminder:', error);
+      toast.error('Failed to send reminders');
+    } finally {
+      setSendingReminder(null);
+    }
+  };
+
   const getStatusBadge = (status: SessionStatus) => {
     const variants: Record<SessionStatus, 'default' | 'secondary' | 'outline' | 'destructive'> = {
       scheduled: 'secondary',
@@ -327,6 +355,17 @@ export function SessionManagement() {
                       <DropdownMenuItem onClick={() => openEditForm(session)}>
                         <Pencil className="w-4 h-4 mr-2" />
                         Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleSendReminder(session.id)}
+                        disabled={sendingReminder === session.id}
+                      >
+                        {sendingReminder === session.id ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-2" />
+                        )}
+                        Send Reminder
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         className="text-destructive"

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
   AlertCircle,
   Scan,
   MapPin,
+  UserCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus, Attendance, AttendanceStatus } from '@/types/auth';
@@ -33,6 +35,7 @@ interface SessionWithAttendance extends Session {
 }
 
 export function TraineeDashboard() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [sessions, setSessions] = useState<SessionWithAttendance[]>([]);
   const [stats, setStats] = useState({
@@ -222,6 +225,14 @@ export function TraineeDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header with Profile Link */}
+      <div className="flex items-center justify-end">
+        <Button variant="outline" onClick={() => navigate('/profile')}>
+          <UserCircle className="w-4 h-4 mr-2" />
+          My Profile
+        </Button>
+      </div>
+
       {/* Scan Button - Prominent */}
       <Card className="p-6 bg-primary/5 border-primary/20">
         <div className="flex items-center justify-between">

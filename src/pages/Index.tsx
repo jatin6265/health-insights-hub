@@ -4,8 +4,9 @@ import { AdminDashboard } from "@/components/dashboards/AdminDashboard";
 import { TrainerDashboard } from "@/components/dashboards/TrainerDashboard";
 import { TraineeDashboard } from "@/components/dashboards/TraineeDashboard";
 import { PendingApproval } from "@/components/dashboards/PendingApproval";
+import { NotificationInbox } from "@/components/notifications/NotificationInbox";
 import { Button } from "@/components/ui/button";
-import { Bell, LogOut, User, Shield, GraduationCap, Users } from "lucide-react";
+import { LogOut, User, Shield, GraduationCap, Users } from "lucide-react";
 import { useEffect } from "react";
 
 const Index = () => {
@@ -73,10 +74,8 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost">
-                <Bell className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="ghost">
+              <NotificationInbox />
+              <Button size="sm" variant="ghost" onClick={() => navigate('/profile')}>
                 <User className="w-4 h-4" />
               </Button>
               <Button size="sm" variant="ghost" onClick={signOut}>

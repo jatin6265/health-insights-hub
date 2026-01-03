@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, Mail, Lock, User } from "lucide-react";
+import { Activity, Mail, Lock, User, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -20,8 +20,14 @@ const signInSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const resetPasswordSchema = z.object({
+  email: z.string().trim().email("Invalid email address"),
+});
+
+type AuthMode = 'signIn' | 'signUp' | 'forgotPassword';
+
 const Auth = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [mode, setMode] = useState<AuthMode>('signIn');
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,7 +79,10 @@ const Auth = () => {
         return;
       }
 
-      toast.success("Welcome to Aura! Your account has been created.");
+      toast.success("Please check your email to confirm your account!", {
+        description: "We sent a verification link to " + validated.email,
+        duration: 8000,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -100,6 +109,8 @@ const Auth = () => {
       if (error) {
         if (error.message.includes("Invalid")) {
           toast.error("Invalid email or password");
+        } else if (error.message.includes("Email not confirmed")) {
+          toast.error("Please verify your email first. Check your inbox for the confirmation link.");
         } else {
           toast.error(error.message);
         }
@@ -118,6 +129,72 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const validated = resetPasswordSchema.parse({ email });
+      setLoading(true);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(validated.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      toast.success("Password reset link sent!", {
+        description: "Check your email for instructions to reset your password.",
+        duration: 8000,
+      });
+      setMode('signIn');
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error("An unexpected error occurred");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getFormTitle = () => {
+    switch (mode) {
+      case 'signUp':
+        return 'Create Account';
+      case 'forgotPassword':
+        return 'Reset Password';
+      default:
+        return 'Sign In';
+    }
+  };
+
+  const getSubmitHandler = () => {
+    switch (mode) {
+      case 'signUp':
+        return handleSignUp;
+      case 'forgotPassword':
+        return handleForgotPassword;
+      default:
+        return handleSignIn;
+    }
+  };
+
+  const getSubmitButtonText = () => {
+    if (loading) return "Please wait...";
+    switch (mode) {
+      case 'signUp':
+        return 'Create Account';
+      case 'forgotPassword':
+        return 'Send Reset Link';
+      default:
+        return 'Sign In';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-calm-gradient flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
@@ -132,17 +209,42 @@ const Auth = () => {
           </p>
         </div>
 
-        {/* Privacy Message */}
-        <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-          <p className="text-xs text-foreground leading-relaxed">
-            🔒 <strong>Privacy First:</strong> Your health data stays on your device. 
-            We only analyze insights, never raw data.
-          </p>
-        </div>
+        {/* Back button for forgot password */}
+        {mode === 'forgotPassword' && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setMode('signIn')}
+            className="w-full"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Sign In
+          </Button>
+        )}
+
+        {/* Privacy Message - only show on main screens */}
+        {mode !== 'forgotPassword' && (
+          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+            <p className="text-xs text-foreground leading-relaxed">
+              🔒 <strong>Privacy First:</strong> Your health data stays on your device. 
+              We only analyze insights, never raw data.
+            </p>
+          </div>
+        )}
+
+        {/* Forgot Password Message */}
+        {mode === 'forgotPassword' && (
+          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+            <p className="text-sm text-foreground leading-relaxed">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+          </div>
+        )}
 
         {/* Form */}
-        <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
-          {isSignUp && (
+        <form onSubmit={getSubmitHandler()} className="space-y-4">
+          {mode === 'signUp' && (
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
               <div className="relative">
@@ -176,43 +278,58 @@ const Auth = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10"
-                required
-              />
+          {mode !== 'forgotPassword' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === 'signIn' && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('forgotPassword')}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <Button
             type="submit"
             className="w-full bg-wellness-gradient"
             disabled={loading}
           >
-            {loading ? "Please wait..." : isSignUp ? "Create Account" : "Sign In"}
+            {getSubmitButtonText()}
           </Button>
         </form>
 
         {/* Toggle Sign Up/Sign In */}
-        <div className="text-center text-sm">
-          <button
-            type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-primary hover:underline"
-          >
-            {isSignUp
-              ? "Already have an account? Sign in"
-              : "Don't have an account? Sign up"}
-          </button>
-        </div>
+        {mode !== 'forgotPassword' && (
+          <div className="text-center text-sm">
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'signUp' ? 'signIn' : 'signUp')}
+              className="text-primary hover:underline"
+            >
+              {mode === 'signUp'
+                ? "Already have an account? Sign in"
+                : "Don't have an account? Sign up"}
+            </button>
+          </div>
+        )}
       </Card>
     </div>
   );

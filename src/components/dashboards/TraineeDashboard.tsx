@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -46,12 +47,25 @@ export function TraineeDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
+  const [isScannerReady, setIsScannerReady] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchTraineeData();
     }
   }, [user]);
+
+  // Delay scanner rendering until dialog animation completes
+  useEffect(() => {
+    if (showScanner) {
+      const timer = setTimeout(() => {
+        setIsScannerReady(true);
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setIsScannerReady(false);
+    }
+  }, [showScanner]);
 
   const fetchTraineeData = async () => {
     if (!user) return;
@@ -127,6 +141,14 @@ export function TraineeDashboard() {
     }
   };
 
+  const handleCloseScanner = useCallback(() => {
+    setIsScannerReady(false);
+    // Small delay to allow scanner cleanup before dialog closes
+    setTimeout(() => {
+      setShowScanner(false);
+    }, 100);
+  }, []);
+
   const handleScan = async (token: string, sessionId: string): Promise<{ success: boolean; message: string }> => {
     try {
       const { data: { session: authSession } } = await supabase.auth.getSession();
@@ -148,7 +170,7 @@ export function TraineeDashboard() {
       if (result.success) {
         toast.success(result.message);
         fetchTraineeData(); // Refresh data
-        setShowScanner(false);
+        handleCloseScanner();
       }
       
       return result;
@@ -403,12 +425,21 @@ export function TraineeDashboard() {
       </Card>
 
       {/* QR Scanner Dialog */}
-      <Dialog open={showScanner} onOpenChange={setShowScanner}>
+      <Dialog open={showScanner} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseScanner();
+        } else {
+          setShowScanner(true);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Scan Attendance QR</DialogTitle>
+            <DialogDescription>
+              Point your camera at the QR code to mark your attendance
+            </DialogDescription>
           </DialogHeader>
-          <QRScanner onScan={handleScan} />
+          {isScannerReady && <QRScanner onScan={handleScan} isActive={isScannerReady} />}
         </DialogContent>
       </Dialog>
     </div>

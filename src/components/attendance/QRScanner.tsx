@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,16 +13,48 @@ export function QRScanner({ onScan }: QRScannerProps) {
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+  const isStoppingRef = useRef(false);
 
-  const startScanning = async () => {
+  const stopScanning = useCallback(async () => {
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+
+    const scanner = scannerRef.current;
+    if (scanner) {
+      try {
+        const state = scanner.getState();
+        if (state === 2) { // Html5QrcodeScannerState.SCANNING
+          await scanner.stop();
+        }
+        scanner.clear();
+      } catch (err) {
+        // Ignore cleanup errors - scanner may already be stopped
+        console.debug('Scanner cleanup:', err);
+      }
+      scannerRef.current = null;
+    }
+
+    if (isMountedRef.current) {
+      setIsScanning(false);
+    }
+    isStoppingRef.current = false;
+  }, []);
+
+  const startScanning = useCallback(async () => {
     try {
       setError(null);
       setScanResult(null);
 
-      if (!containerRef.current) return;
+      // Ensure previous scanner is fully stopped
+      await stopScanning();
 
-      const scanner = new Html5Qrcode('qr-reader');
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      if (!isMountedRef.current) return;
+
+      const scanner = new Html5Qrcode('qr-reader', { verbose: false });
       scannerRef.current = scanner;
 
       await scanner.start(
@@ -32,22 +64,21 @@ export function QRScanner({ onScan }: QRScannerProps) {
           qrbox: { width: 250, height: 250 },
         },
         async (decodedText) => {
-          // Parse the URL to extract token and session
           try {
             const url = new URL(decodedText);
             const token = url.searchParams.get('token');
             const sessionId = url.searchParams.get('session');
 
             if (token && sessionId) {
-              await scanner.stop();
-              setIsScanning(false);
+              await stopScanning();
               
-              const result = await onScan(token, sessionId);
-              setScanResult(result);
+              if (isMountedRef.current) {
+                const result = await onScan(token, sessionId);
+                setScanResult(result);
+              }
             }
           } catch {
-            // Not a valid URL, try parsing as direct token
-            console.log('Invalid QR format');
+            console.debug('Invalid QR format');
           }
         },
         () => {
@@ -55,30 +86,25 @@ export function QRScanner({ onScan }: QRScannerProps) {
         }
       );
 
-      setIsScanning(true);
+      if (isMountedRef.current) {
+        setIsScanning(true);
+      }
     } catch (err) {
       console.error('Error starting scanner:', err);
-      setError('Failed to access camera. Please ensure camera permissions are granted.');
-    }
-  };
-
-  const stopScanning = async () => {
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.stop();
-      } catch (err) {
-        console.error('Error stopping scanner:', err);
+      if (isMountedRef.current) {
+        setError('Failed to access camera. Please ensure camera permissions are granted.');
       }
-      scannerRef.current = null;
     }
-    setIsScanning(false);
-  };
+  }, [onScan, stopScanning]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    
     return () => {
+      isMountedRef.current = false;
       stopScanning();
     };
-  }, []);
+  }, [stopScanning]);
 
   return (
     <Card className="p-6">
@@ -92,7 +118,6 @@ export function QRScanner({ onScan }: QRScannerProps) {
 
         <div
           id="qr-reader"
-          ref={containerRef}
           className="w-full max-w-sm mx-auto aspect-square bg-muted rounded-lg overflow-hidden"
         >
           {!isScanning && !scanResult && (

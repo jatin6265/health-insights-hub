@@ -41,7 +41,7 @@ const emailSchema = z.object({
   email: z.string().trim().email("Invalid email address"),
 });
 
-type AuthMode = "signIn" | "signUp" | "forgotPassword" | "otpVerify";
+type AuthMode = "signIn" | "signUp" | "forgotPassword" | "otpVerify" | "signUpVerify";
 type AuthMethod = "password" | "otp";
 
 const Auth = () => {
@@ -53,6 +53,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -80,13 +81,14 @@ const Auth = () => {
       const validated = signUpSchema.parse({ fullName, email, password });
       setLoading(true);
 
-      const { error } = await supabase.auth.signUp({
+      // Send OTP for email verification during signup
+      const { error } = await supabase.auth.signInWithOtp({
         email: validated.email,
-        password: validated.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          shouldCreateUser: true,
           data: {
             full_name: validated.fullName,
+            password: validated.password, // Store temporarily for after OTP verification
           },
         },
       });
@@ -102,9 +104,10 @@ const Auth = () => {
         return;
       }
 
-      toast.success("Please check your email to confirm your account!", {
-        description: "We sent a verification link to " + validated.email,
-        duration: 8000,
+      setMode("signUpVerify");
+      toast.success("Verification code sent!", {
+        description: "Enter the 6-digit code sent to " + validated.email,
+        duration: 6000,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -201,7 +204,7 @@ const Auth = () => {
     try {
       setLoading(true);
 
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token: otp,
         type: "email",
@@ -210,6 +213,17 @@ const Auth = () => {
       if (error) {
         toast.error(error.message);
         return;
+      }
+
+      // For signup flow, update the password after OTP verification
+      if (mode === "signUpVerify" && password) {
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: password,
+        });
+        
+        if (updateError) {
+          console.error("Failed to set password:", updateError);
+        }
       }
 
       toast.success("Welcome!");
@@ -325,6 +339,77 @@ const Auth = () => {
           <button
             type="button"
             onClick={handleSendOtp}
+            className="text-sm text-primary hover:underline"
+            disabled={loading}
+          >
+            Didn't receive the code? Resend
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderSignUpVerification = () => (
+    <div className="space-y-6">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setMode("signUp");
+          setOtp("");
+        }}
+        className="w-full"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back
+      </Button>
+
+      <div className="text-center space-y-2">
+        <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+          <Mail className="w-8 h-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold text-foreground">
+          Verify Your Email
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          We sent a 6-digit code to <strong>{email}</strong>
+        </p>
+      </div>
+
+      <form onSubmit={handleVerifyOtp} className="space-y-6">
+        <div className="flex justify-center">
+          <InputOTP
+            maxLength={6}
+            value={otp}
+            onChange={(value) => setOtp(value)}
+          >
+            <InputOTPGroup>
+              <InputOTPSlot index={0} />
+              <InputOTPSlot index={1} />
+              <InputOTPSlot index={2} />
+            </InputOTPGroup>
+            <InputOTPSeparator />
+            <InputOTPGroup>
+              <InputOTPSlot index={3} />
+              <InputOTPSlot index={4} />
+              <InputOTPSlot index={5} />
+            </InputOTPGroup>
+          </InputOTP>
+        </div>
+
+        <Button
+          type="submit"
+          className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground"
+          disabled={loading || otp.length !== 6}
+        >
+          {loading ? "Verifying..." : "Verify & Create Account"}
+        </Button>
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={handleSignUp}
             className="text-sm text-primary hover:underline"
             disabled={loading}
           >
@@ -496,6 +581,19 @@ const Auth = () => {
                 </div>
               </div>
 
+              {/* Remember Me Checkbox */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm text-muted-foreground">Remember me</span>
+                </label>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground"
@@ -619,6 +717,7 @@ const Auth = () => {
 
       <Card className="w-full max-w-md p-8 relative backdrop-blur-sm bg-card/95 shadow-xl border-border/50">
         {mode === "otpVerify" && renderOtpVerification()}
+        {mode === "signUpVerify" && renderSignUpVerification()}
         {mode === "forgotPassword" && renderForgotPassword()}
         {(mode === "signIn" || mode === "signUp") && renderAuthForm()}
       </Card>

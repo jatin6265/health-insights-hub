@@ -27,6 +27,11 @@ import { toast } from 'sonner';
 import { Session, SessionStatus, Attendance, AttendanceStatus } from '@/types/auth';
 import { useAuth } from '@/hooks/useAuth';
 import { QRScanner } from '@/components/attendance/QRScanner';
+import { 
+  DashboardStatsSkeleton, 
+  DashboardSessionsSkeleton, 
+  DashboardScanCardSkeleton 
+} from '@/components/ui/dashboard-skeleton';
 
 interface SessionWithAttendance extends Session {
   training?: {
@@ -235,8 +240,17 @@ export function TraineeDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-end">
+          <Button variant="outline" disabled>
+            <UserCircle className="w-4 h-4 mr-2" />
+            My Profile
+          </Button>
+        </div>
+        <DashboardScanCardSkeleton />
+        <DashboardStatsSkeleton />
+        <DashboardSessionsSkeleton />
+        <DashboardSessionsSkeleton />
       </div>
     );
   }

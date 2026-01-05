@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { Session, SessionStatus } from '@/types/auth';
 import { QRCodeDisplay } from '@/components/attendance/QRCodeDisplay';
+import { DashboardStatsSkeleton, DashboardSessionsSkeleton } from '@/components/ui/dashboard-skeleton';
 
 interface SessionWithDetails extends Session {
   training?: {
@@ -214,8 +215,9 @@ export function TrainerDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+      <div className="space-y-6">
+        <DashboardStatsSkeleton />
+        <DashboardSessionsSkeleton />
       </div>
     );
   }

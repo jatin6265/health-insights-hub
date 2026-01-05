@@ -9,7 +9,7 @@ const corsHeaders = {
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
 interface NotificationPayload {
-  type: 'session_reminder' | 'attendance_confirmation' | 'session_cancelled' | 'session_updated';
+  type: 'session_reminder' | 'attendance_confirmation' | 'session_cancelled' | 'session_updated' | 'session_assigned';
   sessionId?: string;
   userId?: string;
   userIds?: string[];
@@ -161,6 +161,44 @@ Deno.serve(async (req) => {
               ${payload.customMessage ? `<p style="color: #721c24;"><strong>Reason:</strong> ${payload.customMessage}</p>` : ''}
             </div>
             <p style="color: #666;">We apologize for any inconvenience. Please check the system for updated schedules.</p>
+            <p style="color: #999; font-size: 12px; margin-top: 30px;">This is an automated notification from your Training Management System.</p>
+          </div>
+        `;
+      }
+    } else if (payload.type === 'session_assigned' && payload.sessionId && payload.userIds) {
+      // Get session details
+      const { data: session } = await supabase
+        .from('sessions')
+        .select('*, trainings (title)')
+        .eq('id', payload.sessionId)
+        .single();
+
+      if (session && payload.userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', payload.userIds);
+
+        recipients = (profiles || [])
+          .filter(p => p.email)
+          .map(p => ({
+            email: p.email!,
+            name: p.full_name || 'Trainee',
+            userId: p.id,
+          }));
+
+        subject = `New Session Assigned: ${session.title}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a1a2e;">You've Been Assigned to a Session</h1>
+            <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h2 style="color: #1565c0; margin-top: 0;">${session.title}</h2>
+              <p style="color: #1565c0;"><strong>Training:</strong> ${(session.trainings as any)?.title || 'N/A'}</p>
+              <p style="color: #1565c0;"><strong>Date:</strong> ${session.scheduled_date}</p>
+              <p style="color: #1565c0;"><strong>Time:</strong> ${session.start_time} - ${session.end_time}</p>
+              ${session.location ? `<p style="color: #1565c0;"><strong>Location:</strong> ${session.location}</p>` : ''}
+            </div>
+            <p style="color: #666;">Please make sure to attend and mark your attendance via QR code scanning.</p>
             <p style="color: #999; font-size: 12px; margin-top: 30px;">This is an automated notification from your Training Management System.</p>
           </div>
         `;

@@ -215,7 +215,8 @@ export function ParticipantManagement() {
 
     setAddingParticipants(true);
     try {
-      const inserts = Array.from(selectedUsers).map(userId => ({
+      const userIdsArray = Array.from(selectedUsers);
+      const inserts = userIdsArray.map(userId => ({
         session_id: selectedSession,
         user_id: userId,
         assigned_by: user.id,
@@ -226,6 +227,20 @@ export function ParticipantManagement() {
         .insert(inserts);
 
       if (error) throw error;
+
+      // Send notification to assigned participants
+      try {
+        await supabase.functions.invoke('send-notification', {
+          body: {
+            type: 'session_assigned',
+            sessionId: selectedSession,
+            userIds: userIdsArray,
+          },
+        });
+      } catch (notifyError) {
+        console.error('Failed to send assignment notifications:', notifyError);
+        // Don't fail the main operation if notification fails
+      }
 
       toast.success(`Added ${selectedUsers.size} participant(s) successfully`);
       setIsAddDialogOpen(false);

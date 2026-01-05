@@ -167,12 +167,15 @@ export function QRScanner({ onScan, isActive = true }: QRScannerProps) {
           </p>
         </div>
 
-        <div
-          id={scannerContainerId.current}
-          className="w-full max-w-sm mx-auto aspect-square bg-muted rounded-lg overflow-hidden"
-        >
+        {/* Important: keep the scanner mount node free of React-managed children.
+            html5-qrcode mutates/clears its container; if React also renders children inside,
+            React can later attempt to delete nodes that the library already removed.
+        */}
+        <div className="relative w-full max-w-sm mx-auto aspect-square bg-muted rounded-lg overflow-hidden">
+          <div id={scannerContainerId.current} className="absolute inset-0" />
+
           {!isScanning && !scanResult && (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center">
               <Camera className="w-16 h-16 text-muted-foreground/50" />
             </div>
           )}

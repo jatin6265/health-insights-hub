@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, UserStatus } from '@/types/auth';
+import { DashboardStatsSkeleton, DashboardTableSkeleton } from '@/components/ui/dashboard-skeleton';
 
 interface PendingUser {
   id: string;
@@ -179,8 +180,9 @@ export function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+      <div className="space-y-6">
+        <DashboardStatsSkeleton />
+        <DashboardTableSkeleton />
       </div>
     );
   }

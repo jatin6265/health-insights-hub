@@ -33,6 +33,8 @@ Deno.serve(async (req) => {
     let recipients: { email: string; name: string; userId: string }[] = [];
     let subject = '';
     let htmlContent = '';
+    let inAppMessage = payload.customMessage || '';
+    const inAppLink: string | null = payload.sessionId ? `/training?session=${payload.sessionId}` : null;
 
     if (payload.type === 'session_reminder' && payload.sessionId) {
       // Get session details
@@ -76,6 +78,7 @@ Deno.serve(async (req) => {
       }
 
       subject = `Reminder: ${session.title} - ${session.scheduled_date}`;
+      inAppMessage = `Reminder: "${session.title}" starts at ${session.start_time} on ${session.scheduled_date}.`;
       htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #1a1a2e;">Session Reminder</h1>
@@ -188,6 +191,7 @@ Deno.serve(async (req) => {
           }));
 
         subject = `New Session Assigned: ${session.title}`;
+        inAppMessage = `You have been assigned to "${session.title}" on ${session.scheduled_date} (${session.start_time} - ${session.end_time}).`;
         htmlContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1a1a2e;">You've Been Assigned to a Session</h1>
@@ -198,7 +202,7 @@ Deno.serve(async (req) => {
               <p style="color: #1565c0;"><strong>Time:</strong> ${session.start_time} - ${session.end_time}</p>
               ${session.location ? `<p style="color: #1565c0;"><strong>Location:</strong> ${session.location}</p>` : ''}
             </div>
-            <p style="color: #666;">Please make sure to attend and mark your attendance via QR code scanning.</p>
+            <p style="color: #666;">Please check your dashboard for details.</p>
             <p style="color: #999; font-size: 12px; margin-top: 30px;">This is an automated notification from your Training Management System.</p>
           </div>
         `;
@@ -215,47 +219,65 @@ Deno.serve(async (req) => {
 
     console.log(`Sending to ${recipients.length} recipients`);
 
-    // Send emails
+    // Send notifications (in-app always; email best-effort)
     const emailPromises = recipients.map(async (recipient) => {
+      const result: { email: string; notification: boolean; emailSent: boolean; error?: unknown } = {
+        email: recipient.email,
+        notification: false,
+        emailSent: false,
+      };
+
       try {
-        const { error } = await resend.emails.send({
+        // Create in-app notification first so users still get notified even if email fails
+        const { error: notifError } = await supabase.from('notifications').insert({
+          user_id: recipient.userId,
+          title: subject,
+          message: inAppMessage || `Notification for ${payload.type.replace(/_/g, ' ')}`,
+          type: payload.type,
+          link: inAppLink,
+          is_read: false,
+        });
+
+        if (notifError) {
+          console.error(`Failed to create in-app notification for ${recipient.userId}:`, notifError);
+        } else {
+          result.notification = true;
+        }
+
+        const { error: emailError } = await resend.emails.send({
           from: 'Training System <onboarding@resend.dev>',
           to: [recipient.email],
           subject,
           html: htmlContent.replace('{{name}}', recipient.name),
         });
 
-        if (error) {
-          console.error(`Failed to send to ${recipient.email}:`, error);
-          return { email: recipient.email, success: false, error };
+        if (emailError) {
+          console.error(`Failed to send to ${recipient.email}:`, emailError);
+          result.error = emailError;
+          return result;
         }
 
-        // Create in-app notification
-        await supabase.from('notifications').insert({
-          user_id: recipient.userId,
-          title: subject,
-          message: payload.customMessage || `Notification for ${payload.type.replace(/_/g, ' ')}`,
-          type: payload.type,
-        });
-
+        result.emailSent = true;
         console.log(`Email sent to ${recipient.email}`);
-        return { email: recipient.email, success: true };
+        return result;
       } catch (err) {
         console.error(`Error sending to ${recipient.email}:`, err);
-        return { email: recipient.email, success: false, error: err };
+        result.error = err;
+        return result;
       }
     });
 
     const results = await Promise.all(emailPromises);
-    const successCount = results.filter(r => r.success).length;
+    const emailSentCount = results.filter(r => r.emailSent).length;
+    const notificationCount = results.filter(r => r.notification).length;
 
-    console.log(`Sent ${successCount}/${recipients.length} emails`);
+    console.log(`Created ${notificationCount}/${recipients.length} in-app notifications; sent ${emailSentCount}/${recipients.length} emails`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Sent ${successCount} of ${recipients.length} notifications`,
-        results 
+      JSON.stringify({
+        success: notificationCount > 0,
+        message: `Created ${notificationCount}/${recipients.length} in-app notifications; sent ${emailSentCount}/${recipients.length} emails`,
+        results,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

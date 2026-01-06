@@ -19,6 +19,7 @@ const newPasswordSchema = z.object({
 
 const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
@@ -26,21 +27,30 @@ const ResetPassword = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user has a valid recovery session
-    supabase.auth.onAuthStateChange((event, session) => {
+    let isMounted = true;
+
+    // Listen for PASSWORD_RECOVERY event
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (!isMounted) return;
       if (event === "PASSWORD_RECOVERY") {
         setIsValidSession(true);
-      } else if (session) {
-        setIsValidSession(true);
+        setChecking(false);
       }
     });
 
-    // Also check current session
+    // Also check current session (covers cases where link lands on /reset-password after session is set)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsValidSession(true);
-      }
+      if (!isMounted) return;
+      setIsValidSession(!!session);
+      setChecking(false);
     });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -76,6 +86,22 @@ const ResetPassword = () => {
       setLoading(false);
     }
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-calm-gradient flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-8 space-y-6 text-center">
+          <div className="flex flex-col items-center space-y-3">
+            <div className="w-16 h-16 rounded-full bg-wellness-gradient flex items-center justify-center">
+              <Activity className="w-8 h-8 text-white animate-spin" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Aura</h1>
+            <p className="text-muted-foreground">Checking reset link…</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!isValidSession) {
     return (

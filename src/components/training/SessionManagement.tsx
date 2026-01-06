@@ -124,7 +124,7 @@ export function SessionManagement() {
   }) => {
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('sessions').insert({
+      const { data: createdSession, error } = await supabase.from('sessions').insert({
         training_id: data.training_id,
         title: data.title,
         description: data.description || null,
@@ -135,9 +135,25 @@ export function SessionManagement() {
         trainer_id: data.trainer_id || null,
         late_threshold_minutes: data.late_threshold_minutes,
         status: 'scheduled',
-      });
+      }).select('id, trainer_id').single();
 
       if (error) throw error;
+
+      // Notify assigned trainer (if any)
+      if (createdSession?.trainer_id) {
+        try {
+          await supabase.functions.invoke('send-notification', {
+            body: {
+              type: 'session_assigned',
+              sessionId: createdSession.id,
+              userIds: [createdSession.trainer_id],
+              customMessage: 'You have been assigned to lead this session.',
+            },
+          });
+        } catch (notifyError) {
+          console.error('Failed to notify trainer:', notifyError);
+        }
+      }
 
       toast.success('Session created successfully');
       setIsFormOpen(false);
@@ -163,6 +179,9 @@ export function SessionManagement() {
   }) => {
     if (!editingSession) return;
 
+    const prevTrainerId = editingSession.trainer_id || null;
+    const nextTrainerId = data.trainer_id || null;
+
     setIsSubmitting(true);
     try {
       const { error } = await supabase
@@ -175,12 +194,28 @@ export function SessionManagement() {
           start_time: data.start_time,
           end_time: data.end_time,
           location: data.location || null,
-          trainer_id: data.trainer_id || null,
+          trainer_id: nextTrainerId,
           late_threshold_minutes: data.late_threshold_minutes,
         })
         .eq('id', editingSession.id);
 
       if (error) throw error;
+
+      // Notify newly assigned trainer (if changed)
+      if (nextTrainerId && nextTrainerId !== prevTrainerId) {
+        try {
+          await supabase.functions.invoke('send-notification', {
+            body: {
+              type: 'session_assigned',
+              sessionId: editingSession.id,
+              userIds: [nextTrainerId],
+              customMessage: 'You have been assigned to lead this session.',
+            },
+          });
+        } catch (notifyError) {
+          console.error('Failed to notify trainer:', notifyError);
+        }
+      }
 
       toast.success('Session updated successfully');
       setEditingSession(null);

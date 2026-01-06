@@ -81,14 +81,14 @@ const Auth = () => {
       const validated = signUpSchema.parse({ fullName, email, password });
       setLoading(true);
 
-      // Send OTP for email verification during signup
+      // Send email OTP for verification during signup (email may include both a code and a link)
       const { error } = await supabase.auth.signInWithOtp({
         email: validated.email,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth`,
           data: {
             full_name: validated.fullName,
-            password: validated.password, // Store temporarily for after OTP verification
           },
         },
       });
@@ -105,9 +105,9 @@ const Auth = () => {
       }
 
       setMode("signUpVerify");
-      toast.success("Verification code sent!", {
-        description: "Enter the 6-digit code sent to " + validated.email,
-        duration: 6000,
+      toast.success("Verification email sent!", {
+        description: "Check your inbox for a 6-digit code (or click the link) for " + validated.email,
+        duration: 7000,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -118,8 +118,41 @@ const Auth = () => {
     } finally {
       setLoading(false);
     }
-  };
+   };
 
+  const handleResendSignUpOtp = async () => {
+    try {
+      const validated = signUpSchema.parse({ fullName, email, password });
+      setLoading(true);
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: validated.email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth`,
+          data: {
+            full_name: validated.fullName,
+          },
+        },
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      toast.success('Verification email re-sent', { duration: 5000 });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error('Failed to resend verification email');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+ 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -215,14 +248,14 @@ const Auth = () => {
         return;
       }
 
-      // For signup flow, update the password after OTP verification
+      // For signup flow, set the password after OTP verification (optional)
       if (mode === "signUpVerify" && password) {
         const { error: updateError } = await supabase.auth.updateUser({
           password: password,
         });
-        
+
         if (updateError) {
-          console.error("Failed to set password:", updateError);
+          toast.error('Account verified, but password could not be set. Use "Forgot password" to set one.');
         }
       }
 
@@ -409,11 +442,11 @@ const Auth = () => {
         <div className="text-center">
           <button
             type="button"
-            onClick={handleSignUp}
+            onClick={handleResendSignUpOtp}
             className="text-sm text-primary hover:underline"
             disabled={loading}
           >
-            Didn't receive the code? Resend
+            Didn't receive the email? Resend
           </button>
         </div>
       </form>

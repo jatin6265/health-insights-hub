@@ -26,10 +26,12 @@ import {
   BookOpen,
   Save,
   Loader2,
+  Palette,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface TrainingHistory {
   trainingId: string;
@@ -339,6 +341,10 @@ export default function Profile() {
               <Clock className="w-4 h-4 mr-2" />
               Attendance Records
             </TabsTrigger>
+            <TabsTrigger value="appearance">
+              <Palette className="w-4 h-4 mr-2" />
+              Appearance
+            </TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
@@ -469,6 +475,24 @@ export default function Profile() {
                   </TableBody>
                 </Table>
               )}
+            </Card>
+          </TabsContent>
+
+          {/* Appearance Tab */}
+          <TabsContent value="appearance">
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold text-foreground mb-4">Appearance Settings</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base">Theme</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Choose your preferred theme or use system default
+                    </p>
+                  </div>
+                  <ThemeToggle />
+                </div>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

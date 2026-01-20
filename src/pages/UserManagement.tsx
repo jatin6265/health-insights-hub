@@ -6,13 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Search, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building } from 'lucide-react';
+import { ArrowLeft, Search, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building, KeyRound, Trash2, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { AppRole, UserStatus, UserWithRole } from '@/types/auth';
+import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 
 export default function UserManagement() {
   const { user, loading, isAdmin } = useAuth();
@@ -24,9 +27,14 @@ export default function UserManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [newRole, setNewRole] = useState<AppRole>('trainee');
   const [newStatus, setNewStatus] = useState<UserStatus>('pending');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -99,6 +107,13 @@ export default function UserManagement() {
     setShowEditDialog(true);
   };
 
+  const handleResetPassword = (u: UserWithRole) => {
+    setSelectedUser(u);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPasswordDialog(true);
+  };
+
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
     setUpdating(true);
@@ -169,6 +184,93 @@ export default function UserManagement() {
     setSelectedUser(null);
     setUpdating(false);
     fetchUsers();
+  };
+
+  const handleSubmitPasswordReset = async () => {
+    if (!selectedUser) return;
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!validatePasswordStrength(newPassword)) {
+      toast({
+        title: 'Error',
+        description: 'Password is too weak. Please use a stronger password.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setResettingPassword(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const response = await supabase.functions.invoke('admin-reset-password', {
+        body: { userId: selectedUser.id, newPassword },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Password has been reset successfully'
+      });
+      setShowPasswordDialog(false);
+      setSelectedUser(null);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset password',
+        variant: 'destructive'
+      });
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleDeleteUser = async (userToDelete: UserWithRole) => {
+    setDeletingUser(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const response = await supabase.functions.invoke('delete-user', {
+        body: { userId: userToDelete.id },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast({
+        title: 'Success',
+        description: 'User has been permanently deleted'
+      });
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete user',
+        variant: 'destructive'
+      });
+    } finally {
+      setDeletingUser(false);
+    }
   };
 
   const getStatusBadge = (status: UserStatus) => {
@@ -425,13 +527,57 @@ export default function UserManagement() {
                           {new Date(u.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleEditUser(u)}
-                          >
-                            Edit
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleEditUser(u)}
+                            >
+                              Edit
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleResetPassword(u)}
+                            >
+                              <KeyRound className="h-3 w-3" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={u.id === user?.id}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User Permanently</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to permanently delete {u.full_name || u.email}? 
+                                    This action cannot be undone and will remove all their data including 
+                                    attendance records, session participations, and notifications.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    disabled={deletingUser}
+                                  >
+                                    {deletingUser ? (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : null}
+                                    Delete Permanently
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -454,7 +600,7 @@ export default function UserManagement() {
             
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Role</label>
+                <Label>Role</Label>
                 <Select value={newRole} onValueChange={(value: AppRole) => setNewRole(value)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -468,7 +614,7 @@ export default function UserManagement() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Status</label>
+                <Label>Status</Label>
                 <Select value={newStatus} onValueChange={(value: UserStatus) => setNewStatus(value)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -489,6 +635,65 @@ export default function UserManagement() {
               </Button>
               <Button onClick={handleUpdateUser} disabled={updating}>
                 {updating ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reset Password Dialog */}
+        <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Set a new password for {selectedUser?.full_name || selectedUser?.email}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <PasswordStrengthIndicator password={newPassword} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-destructive">Passwords don't match</p>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowPasswordDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSubmitPasswordReset} 
+                disabled={resettingPassword || !newPassword || newPassword !== confirmPassword}
+              >
+                {resettingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Resetting...
+                  </>
+                ) : (
+                  'Reset Password'
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

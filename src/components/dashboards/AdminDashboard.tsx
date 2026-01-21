@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -22,10 +23,12 @@ import {
   Shield,
   TrendingUp,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, UserStatus } from '@/types/auth';
 import { DashboardStatsSkeleton, DashboardTableSkeleton } from '@/components/ui/dashboard-skeleton';
+import { SessionAttendanceDetails } from '@/components/training/SessionAttendanceDetails';
 
 interface PendingUser {
   id: string;
@@ -188,7 +191,16 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="overview" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="attendance" className="flex items-center gap-2">
+          <ClipboardList className="w-4 h-4" />
+          Attendance Details
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="overview" className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-6">
@@ -346,6 +358,11 @@ export function AdminDashboard() {
           </Button>
         </div>
       </Card>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="attendance">
+        <SessionAttendanceDetails />
+      </TabsContent>
+    </Tabs>
   );
 }

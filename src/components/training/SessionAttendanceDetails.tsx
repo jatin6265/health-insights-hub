@@ -35,13 +35,9 @@ import {
   Calendar,
   Eye,
   RefreshCw,
-  Download,
-  FileText,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AttendanceStatus } from '@/types/auth';
-import { exportToCSV, exportToPDF, AttendanceExportData } from '@/lib/exportUtils';
 import { useRealtimeAttendance } from '@/hooks/useRealtimeAttendance';
 
 interface Session {
@@ -278,43 +274,6 @@ export function SessionAttendanceDetails() {
     pending: participants.filter(p => !p.attendance_status).length,
   };
 
-  const getExportData = (): AttendanceExportData | null => {
-    if (!selectedSessionDetails) return null;
-    return {
-      sessionTitle: selectedSessionDetails.title,
-      trainingTitle: selectedSessionDetails.training_title,
-      sessionDate: selectedSessionDetails.scheduled_date,
-      sessionTime: selectedSessionDetails.start_time,
-      participants: participants.map(p => ({
-        name: p.full_name,
-        email: p.email,
-        status: p.attendance_status || 'Pending',
-        joinTime: p.join_time ? new Date(p.join_time).toLocaleTimeString() : '',
-      })),
-      stats,
-    };
-  };
-
-  const handleExportCSV = () => {
-    const data = getExportData();
-    if (!data) {
-      toast.error('Please select a session first');
-      return;
-    }
-    exportToCSV(data);
-    toast.success('CSV file downloaded');
-  };
-
-  const handleExportPDF = () => {
-    const data = getExportData();
-    if (!data) {
-      toast.error('Please select a session first');
-      return;
-    }
-    exportToPDF(data);
-    toast.success('PDF file downloaded');
-  };
-
   if (loading) {
     return (
       <Card className="p-6">
@@ -346,19 +305,12 @@ export function SessionAttendanceDetails() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={fetchParticipants} title="Refresh">
+          <Button variant="outline" size="icon" onClick={fetchParticipants}>
             <RefreshCw className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={participants.length === 0}>
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={participants.length === 0}>
-            <FileText className="w-4 h-4 mr-2" />
-            PDF
           </Button>
         </div>
       </div>
+
       {selectedSessionDetails && (
         <div className="mb-4 p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center justify-between">

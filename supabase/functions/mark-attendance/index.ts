@@ -65,7 +65,10 @@ Deno.serve(async (req) => {
     if (sessionError || !session) {
       console.log('Session not found or invalid token:', sessionError);
       return new Response(
-        JSON.stringify({ success: false, message: 'Invalid QR code or session not active' }),
+        JSON.stringify({ 
+          success: false, 
+          message: 'Invalid or expired QR code. Please ask your trainer to refresh the QR code and try again.' 
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -74,7 +77,10 @@ Deno.serve(async (req) => {
     if (session.qr_expires_at && new Date(session.qr_expires_at) < new Date()) {
       console.log('QR code expired');
       return new Response(
-        JSON.stringify({ success: false, message: 'QR code has expired. Ask trainer to refresh.' }),
+        JSON.stringify({ 
+          success: false, 
+          message: 'This QR code has expired. Please ask your trainer to display a fresh QR code.' 
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -90,7 +96,10 @@ Deno.serve(async (req) => {
     if (!participant) {
       console.log('User is not a participant of this session');
       return new Response(
-        JSON.stringify({ success: false, message: 'You are not enrolled in this session' }),
+        JSON.stringify({ 
+          success: false, 
+          message: `You are not enrolled in "${session.title}". Please ask your trainer to add you as a participant, or use the self-enrollment feature if available.` 
+        }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

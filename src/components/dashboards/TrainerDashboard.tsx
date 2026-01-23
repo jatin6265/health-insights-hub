@@ -16,12 +16,14 @@ import {
   PlusCircle,
   BarChart3,
   ClipboardList,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus } from '@/types/auth';
 import { QRCodeDisplay } from '@/components/attendance/QRCodeDisplay';
 import { DashboardStatsSkeleton, DashboardSessionsSkeleton } from '@/components/ui/dashboard-skeleton';
 import { SessionAttendanceDetails } from '@/components/training/SessionAttendanceDetails';
+import { ParticipantManagement } from '@/components/training/ParticipantManagement';
 
 interface SessionWithDetails extends Session {
   training?: {
@@ -229,6 +231,10 @@ export function TrainerDashboard() {
     <Tabs defaultValue="overview" className="space-y-6">
       <TabsList>
         <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="participants" className="flex items-center gap-2">
+          <UserPlus className="w-4 h-4" />
+          Participants
+        </TabsTrigger>
         <TabsTrigger value="attendance" className="flex items-center gap-2">
           <ClipboardList className="w-4 h-4" />
           Attendance Details
@@ -382,6 +388,10 @@ export function TrainerDashboard() {
           onRefresh={() => handleRefreshQR(qrSession.id)}
         />
       )}
+      </TabsContent>
+
+      <TabsContent value="participants">
+        <ParticipantManagement />
       </TabsContent>
 
       <TabsContent value="attendance">

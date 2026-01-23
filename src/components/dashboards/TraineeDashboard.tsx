@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
   Scan,
   MapPin,
   UserCircle,
+  BookOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Session, SessionStatus, Attendance, AttendanceStatus } from '@/types/auth';
@@ -32,6 +34,7 @@ import {
   DashboardSessionsSkeleton, 
   DashboardScanCardSkeleton 
 } from '@/components/ui/dashboard-skeleton';
+import { SelfEnrollment } from '@/components/training/SelfEnrollment';
 
 interface SessionWithAttendance extends Session {
   training?: {
@@ -260,15 +263,22 @@ export function TraineeDashboard() {
   const pastSessions = sessions.filter(s => s.status === 'completed');
 
   return (
-    <div className="space-y-6">
-      {/* Header with Profile Link */}
-      <div className="flex items-center justify-end">
+    <Tabs defaultValue="dashboard" className="space-y-6">
+      <div className="flex items-center justify-between">
+        <TabsList>
+          <TabsTrigger value="dashboard">My Dashboard</TabsTrigger>
+          <TabsTrigger value="enroll" className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            Browse Sessions
+          </TabsTrigger>
+        </TabsList>
         <Button variant="outline" onClick={() => navigate('/profile')}>
           <UserCircle className="w-4 h-4 mr-2" />
           My Profile
         </Button>
       </div>
 
+      <TabsContent value="dashboard" className="space-y-6">
       {/* Scan Button - Prominent */}
       <Card className="p-6 bg-primary/5 border-primary/20">
         <div className="flex items-center justify-between">
@@ -456,6 +466,11 @@ export function TraineeDashboard() {
           {isScannerReady && <QRScanner onScan={handleScan} isActive={isScannerReady} />}
         </DialogContent>
       </Dialog>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="enroll">
+        <SelfEnrollment />
+      </TabsContent>
+    </Tabs>
   );
 }

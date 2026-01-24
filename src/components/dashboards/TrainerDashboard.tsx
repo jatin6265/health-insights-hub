@@ -179,29 +179,40 @@ export function TrainerDashboard() {
     }
   };
 
-  const handleRefreshQR = async (sessionId: string) => {
-    try {
-      const qrToken = crypto.randomUUID();
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 4);
+const handleRefreshQR = async (sessionId: string) => {
+  try {
+    const qrToken = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 4);
 
-      const { error } = await supabase
-        .from('sessions')
-        .update({
-          qr_token: qrToken,
-          qr_expires_at: expiresAt.toISOString(),
-        })
-        .eq('id', sessionId);
+    const { error } = await supabase
+      .from('sessions')
+      .update({
+        qr_token: qrToken,
+        qr_expires_at: expiresAt.toISOString(),
+      })
+      .eq('id', sessionId);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      toast.success('QR code refreshed');
-      fetchTrainerData();
-    } catch (error) {
-      console.error('Error refreshing QR:', error);
-      toast.error('Failed to refresh QR code');
-    }
-  };
+    // 🔥 CRITICAL FIX: update dialog state immediately
+    setQrSession(prev =>
+      prev
+        ? {
+            ...prev,
+            qr_token: qrToken,
+            qr_expires_at: expiresAt.toISOString(),
+          }
+        : prev
+    );
+
+    toast.success('QR code refreshed');
+  } catch (error) {
+    console.error('Error refreshing QR:', error);
+    toast.error('Failed to refresh QR code');
+  }
+};
+
 
   const getStatusBadge = (status: SessionStatus) => {
     switch (status) {

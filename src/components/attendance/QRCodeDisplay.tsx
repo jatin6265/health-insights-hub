@@ -40,12 +40,14 @@ export function QRCodeDisplay({
   onRefresh,
 }: QRCodeDisplayProps) {
   const [timeRemaining, setTimeRemaining] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
   const { attendanceList, loading } = useRealtimeAttendance({
     sessionId,
     enabled: isOpen,
   });
 
-  /* -------------------- Expiry handling -------------------- */
+  /* -------------------- Expiry logic -------------------- */
   const isExpired = useMemo(() => {
     if (!expiresAt) return true;
     return new Date(expiresAt).getTime() <= Date.now();
@@ -75,7 +77,7 @@ export function QRCodeDisplay({
     return () => clearInterval(id);
   }, [expiresAt]);
 
-  /* -------------------- QR URL -------------------- */
+  /* -------------------- Attendance URL -------------------- */
   const attendanceUrl =
     qrToken && !isExpired
       ? `${window.location.origin}/scan?token=${qrToken}&session=${sessionId}`
@@ -83,6 +85,17 @@ export function QRCodeDisplay({
 
   const presentCount = attendanceList.filter(a => a.status === 'present').length;
   const lateCount = attendanceList.filter(a => a.status === 'late').length;
+
+  /* -------------------- Refresh handler -------------------- */
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    try {
+      setRefreshing(true);
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -92,7 +105,7 @@ export function QRCodeDisplay({
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* -------------------- QR SECTION -------------------- */}
+          {/* ==================== QR SECTION ==================== */}
           <div className="flex flex-col items-center space-y-4">
             <p className="text-sm text-muted-foreground text-center">
               {sessionTitle}
@@ -101,7 +114,9 @@ export function QRCodeDisplay({
             {qrToken && !isExpired ? (
               <>
                 <Card className="p-6 bg-white">
+                  {/* 🔑 KEY FIX */}
                   <QRCodeSVG
+                    key={qrToken}
                     value={attendanceUrl}
                     size={200}
                     level="H"
@@ -117,9 +132,18 @@ export function QRCodeDisplay({
                   </span>
                 </div>
 
-                <Button variant="outline" size="sm" onClick={onRefresh}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh QR
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 mr-2 ${
+                      refreshing ? 'animate-spin' : ''
+                    }`}
+                  />
+                  {refreshing ? 'Refreshing…' : 'Refresh QR'}
                 </Button>
               </>
             ) : (
@@ -131,15 +155,19 @@ export function QRCodeDisplay({
                 <p className="text-sm">
                   Please refresh the QR to continue attendance.
                 </p>
-                <Button size="sm" onClick={onRefresh}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                <Button size="sm" onClick={handleRefresh} disabled={refreshing}>
+                  <RefreshCw
+                    className={`w-4 h-4 mr-2 ${
+                      refreshing ? 'animate-spin' : ''
+                    }`}
+                  />
                   Generate New QR
                 </Button>
               </div>
             )}
           </div>
 
-          {/* -------------------- LIVE ATTENDANCE -------------------- */}
+          {/* ================= LIVE ATTENDANCE ================= */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

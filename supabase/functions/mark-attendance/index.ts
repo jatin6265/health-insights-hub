@@ -18,7 +18,6 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 }
 
 Deno.serve(async (req) => {
-  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
@@ -27,106 +26,149 @@ Deno.serve(async (req) => {
   console.log(`[${debugId}] Attendance request received`);
 
   try {
-    // Parse request body
+    /* ---------- Parse body ---------- */
     const body = await req.json();
-    const { token, sessionId } = body;
+
+    const token =
+      body.token ??
+      body.qrToken ??
+      body.qr_token;
+
+    const sessionId =
+      body.sessionId ??
+      body.session ??
+      body.session_id;
 
     if (!token || !sessionId) {
       return jsonResponse(
-        { success: false, message: "Missing QR token or session ID. Please scan a valid QR code.", debugId },
+        {
+          success: false,
+          reason: "INVALID_PAYLOAD",
+          message: "Missing QR token or session ID.",
+          debugId,
+        },
         400
       );
     }
 
-    // Check authorization
+    /* ---------- Auth ---------- */
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return jsonResponse(
-        { success: false, message: "Please log in to mark your attendance.", debugId },
+        {
+          success: false,
+          reason: "NOT_AUTHENTICATED",
+          message: "Please log in to mark attendance.",
+          debugId,
+        },
         401
       );
     }
 
-    // Get environment variables
+    /* ---------- Env ---------- */
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !anonKey || !serviceKey) {
-      console.error(`[${debugId}] Server misconfigured - missing env vars`);
+      console.error(`[${debugId}] Missing env vars`);
       return jsonResponse(
-        { success: false, message: "Server configuration error. Please contact support.", debugId },
+        {
+          success: false,
+          reason: "SERVER_CONFIG_ERROR",
+          message: "Server misconfiguration.",
+          debugId,
+        },
         500
       );
     }
 
-    // Create user client to verify JWT
+    /* ---------- Verify user ---------- */
     const supabaseUser = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+    const { data: { user }, error: userError } =
+      await supabaseUser.auth.getUser();
 
     if (userError || !user) {
-      console.log(`[${debugId}] Authentication failed:`, userError);
       return jsonResponse(
-        { success: false, message: "Your session has expired. Please log in again.", debugId },
+        {
+          success: false,
+          reason: "INVALID_SESSION",
+          message: "Authentication failed.",
+          debugId,
+        },
         401
       );
     }
 
-    console.log(`[${debugId}] User authenticated: ${user.id}`);
-
-    // Create admin client for database operations
+    /* ---------- Admin client ---------- */
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
-    // Fetch session details
-    const { data: session, error: sessionError } = await supabaseAdmin
+    /* ---------- Fetch session ---------- */
+    const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, late_threshold_minutes")
+      .select(
+        "id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, late_threshold_minutes"
+      )
       .eq("id", sessionId)
       .maybeSingle();
 
-    if (sessionError || !session) {
-      console.log(`[${debugId}] Session not found:`, sessionError);
+    if (!session) {
       return jsonResponse(
-        { success: false, message: "This QR code is invalid. The session may have been deleted or the QR code is corrupted.", debugId },
+        {
+          success: false,
+          reason: "SESSION_NOT_FOUND",
+          message: "Session not found.",
+          debugId,
+        },
         400
       );
     }
 
-    // Validate session status
     if (session.status !== "active") {
-      const statusMessages: Record<string, string> = {
-        scheduled: "This session hasn't started yet. Please wait for your trainer to start the session.",
-        completed: "This session has already ended. Attendance can no longer be marked.",
-        cancelled: "This session has been cancelled.",
-      };
       return jsonResponse(
-        { success: false, message: statusMessages[session.status] || "This session is not currently active.", debugId },
+        {
+          success: false,
+          reason: "SESSION_INACTIVE",
+          message: "Session is not active.",
+          debugId,
+        },
         400
       );
     }
 
-    // Validate QR token
+    /* ---------- QR expiry FIRST ---------- */
+    if (
+      session.qr_expires_at &&
+      new Date(session.qr_expires_at).getTime() <= Date.now()
+    ) {
+      return jsonResponse(
+        {
+          success: false,
+          reason: "QR_EXPIRED",
+          message: "QR code has expired. Please refresh.",
+          debugId,
+        },
+        400
+      );
+    }
+
+    /* ---------- QR token match ---------- */
     if (session.qr_token !== token) {
-      console.log(`[${debugId}] Invalid QR token`);
       return jsonResponse(
-        { success: false, message: "This QR code is outdated. Please ask your trainer to display a fresh QR code.", debugId },
+        {
+          success: false,
+          reason: "QR_TOKEN_MISMATCH",
+          message: "QR code is outdated. Please refresh.",
+          debugId,
+        },
         400
       );
     }
 
-    // Check QR expiry
-    if (session.qr_expires_at && new Date(session.qr_expires_at) < new Date()) {
-      console.log(`[${debugId}] QR code expired`);
-      return jsonResponse(
-        { success: false, message: "This QR code has expired. Please ask your trainer to refresh the QR code and try again.", debugId },
-        400
-      );
-    }
-
-    // Check if user is a participant
+    /* ---------- Participant check ---------- */
     const { data: participant } = await supabaseAdmin
       .from("session_participants")
       .select("id")
@@ -135,18 +177,18 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!participant) {
-      console.log(`[${debugId}] User not enrolled in session`);
       return jsonResponse(
-        { 
-          success: false, 
-          message: `You are not enrolled in "${session.title}". Please ask your trainer to add you as a participant, or use the self-enrollment feature in your dashboard.`,
-          debugId 
+        {
+          success: false,
+          reason: "NOT_ENROLLED",
+          message: `You are not enrolled in "${session.title}".`,
+          debugId,
         },
         403
       );
     }
 
-    // Check for existing attendance
+    /* ---------- Attendance check ---------- */
     const { data: existing } = await supabaseAdmin
       .from("attendance")
       .select("id, status")
@@ -155,21 +197,27 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existing && existing.status !== "absent") {
-      const statusLabel = existing.status === "late" ? "late" : "present";
       return jsonResponse(
-        { success: true, message: `Your attendance was already recorded as ${statusLabel}.`, status: existing.status, debugId },
+        {
+          success: true,
+          message: `Attendance already marked as ${existing.status}.`,
+          status: existing.status,
+          debugId,
+        },
         200
       );
     }
 
-    // Calculate if late
+    /* ---------- Late logic ---------- */
     const now = new Date();
-    const sessionStart = new Date(`${session.scheduled_date}T${session.start_time}`);
+    const sessionStart = new Date(
+      `${session.scheduled_date}T${session.start_time}+00:00`
+    );
+
     const lateThreshold = session.late_threshold_minutes ?? 15;
     const lateTime = new Date(sessionStart.getTime() + lateThreshold * 60000);
     const status = now > lateTime ? "late" : "present";
 
-    // Prepare attendance record
     const attendancePayload = {
       session_id: sessionId,
       user_id: user.id,
@@ -180,51 +228,38 @@ Deno.serve(async (req) => {
       user_agent: req.headers.get("user-agent") ?? "unknown",
     };
 
-    // Insert or update attendance
     if (existing) {
-      const { error: updateError } = await supabaseAdmin
+      await supabaseAdmin
         .from("attendance")
         .update(attendancePayload)
         .eq("id", existing.id);
-      
-      if (updateError) {
-        console.error(`[${debugId}] Failed to update attendance:`, updateError);
-        return jsonResponse(
-          { success: false, message: "Failed to update your attendance. Please try again.", debugId },
-          500
-        );
-      }
     } else {
-      const { error: insertError } = await supabaseAdmin
+      await supabaseAdmin
         .from("attendance")
         .insert(attendancePayload);
-      
-      if (insertError) {
-        console.error(`[${debugId}] Failed to insert attendance:`, insertError);
-        return jsonResponse(
-          { success: false, message: "Failed to record your attendance. Please try again.", debugId },
-          500
-        );
-      }
     }
-
-    console.log(`[${debugId}] Attendance marked successfully as ${status}`);
 
     return jsonResponse(
       {
         success: true,
-        message: status === "late" 
-          ? "Attendance marked as LATE. You arrived after the grace period."
-          : "Attendance marked successfully! You're on time.",
+        message:
+          status === "late"
+            ? "Attendance marked as LATE."
+            : "Attendance marked successfully.",
         status,
         debugId,
       },
       200
     );
   } catch (error) {
-    console.error(`[${debugId}] Fatal error:`, error);
+    console.error(`[${debugId}] Fatal error`, error);
     return jsonResponse(
-      { success: false, message: "An unexpected error occurred. Please try again or contact support.", debugId },
+      {
+        success: false,
+        reason: "INTERNAL_ERROR",
+        message: "Unexpected server error.",
+        debugId,
+      },
       500
     );
   }

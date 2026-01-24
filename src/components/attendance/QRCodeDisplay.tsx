@@ -9,8 +9,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Clock, RefreshCw, Users, CheckCircle, AlertCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import {
+  Clock,
+  RefreshCw,
+  Users,
+  CheckCircle,
+  AlertCircle,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRealtimeAttendance } from '@/hooks/useRealtimeAttendance';
 import { format } from 'date-fns';
 
@@ -21,7 +27,7 @@ interface QRCodeDisplayProps {
   expiresAt: string | null;
   isOpen: boolean;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
 }
 
 export function QRCodeDisplay({
@@ -33,42 +39,47 @@ export function QRCodeDisplay({
   onClose,
   onRefresh,
 }: QRCodeDisplayProps) {
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
-  const { attendanceList, loading: attendanceLoading } = useRealtimeAttendance({
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const { attendanceList, loading } = useRealtimeAttendance({
     sessionId,
     enabled: isOpen,
   });
 
+  /* -------------------- Expiry handling -------------------- */
+  const isExpired = useMemo(() => {
+    if (!expiresAt) return true;
+    return new Date(expiresAt).getTime() <= Date.now();
+  }, [expiresAt]);
+
   useEffect(() => {
-    if (!expiresAt) return;
+    if (!expiresAt) {
+      setTimeRemaining('Expired');
+      return;
+    }
 
-    const updateTimer = () => {
-      const now = new Date();
-      const expires = new Date(expiresAt);
-      const diff = expires.getTime() - now.getTime();
-
+    const tick = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now();
       if (diff <= 0) {
         setTimeRemaining('Expired');
         return;
       }
 
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1_000);
+      setTimeRemaining(`${h}h ${m}m ${s}s`);
     };
 
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-
-    return () => clearInterval(interval);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [expiresAt]);
 
-  // Generate the attendance URL with the QR token
-  const attendanceUrl = qrToken 
-    ? `${window.location.origin}/scan?token=${qrToken}&session=${sessionId}`
-    : '';
+  /* -------------------- QR URL -------------------- */
+  const attendanceUrl =
+    qrToken && !isExpired
+      ? `${window.location.origin}/scan?token=${qrToken}&session=${sessionId}`
+      : '';
 
   const presentCount = attendanceList.filter(a => a.status === 'present').length;
   const lateCount = attendanceList.filter(a => a.status === 'late').length;
@@ -79,15 +90,15 @@ export function QRCodeDisplay({
         <DialogHeader>
           <DialogTitle className="text-center">Session QR Code</DialogTitle>
         </DialogHeader>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* QR Code Section */}
+          {/* -------------------- QR SECTION -------------------- */}
           <div className="flex flex-col items-center space-y-4">
             <p className="text-sm text-muted-foreground text-center">
               {sessionTitle}
             </p>
 
-            {qrToken ? (
+            {qrToken && !isExpired ? (
               <>
                 <Card className="p-6 bg-white">
                   <QRCodeSVG
@@ -101,7 +112,7 @@ export function QRCodeDisplay({
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="w-4 h-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Expires in:</span>
-                  <span className={`font-medium ${timeRemaining === 'Expired' ? 'text-destructive' : 'text-foreground'}`}>
+                  <span className="font-medium text-foreground">
                     {timeRemaining}
                   </span>
                 </div>
@@ -112,44 +123,48 @@ export function QRCodeDisplay({
                 </Button>
               </>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No active QR code</p>
-                <p className="text-sm">Start the session to generate a QR code</p>
+              <div className="text-center py-8 space-y-2 text-muted-foreground">
+                <AlertCircle className="w-8 h-8 mx-auto text-destructive" />
+                <p className="font-medium text-destructive">
+                  QR Code Expired
+                </p>
+                <p className="text-sm">
+                  Please refresh the QR to continue attendance.
+                </p>
+                <Button size="sm" onClick={onRefresh}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Generate New QR
+                </Button>
               </div>
             )}
           </div>
 
-          {/* Real-time Attendance Section */}
+          {/* -------------------- LIVE ATTENDANCE -------------------- */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-foreground">Live Attendance</h3>
+                <h3 className="font-semibold">Live Attendance</h3>
               </div>
               <div className="flex gap-2">
-                <Badge className="bg-green-500">
-                  {presentCount} Present
-                </Badge>
-                <Badge className="bg-amber-500">
-                  {lateCount} Late
-                </Badge>
+                <Badge className="bg-green-500">{presentCount} Present</Badge>
+                <Badge className="bg-amber-500">{lateCount} Late</Badge>
               </div>
             </div>
 
             <ScrollArea className="h-[280px] border rounded-lg p-2">
-              {attendanceLoading ? (
+              {loading ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   Loading...
                 </div>
               ) : attendanceList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <Users className="w-8 h-8 mb-2 opacity-50" />
-                  <p className="text-sm">No attendance recorded yet</p>
-                  <p className="text-xs">Waiting for participants...</p>
+                  <p className="text-sm">No attendance yet</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {attendanceList.map((record) => (
+                  {attendanceList.map(record => (
                     <div
                       key={record.id}
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
@@ -157,19 +172,20 @@ export function QRCodeDisplay({
                       <div className="flex items-center gap-2">
                         {record.status === 'present' ? (
                           <CheckCircle className="w-4 h-4 text-green-500" />
-                        ) : record.status === 'late' ? (
-                          <AlertCircle className="w-4 h-4 text-amber-500" />
                         ) : (
-                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <AlertCircle className="w-4 h-4 text-amber-500" />
                         )}
-                        <span className="text-sm font-medium text-foreground">
+                        <span className="text-sm font-medium">
                           {record.user_name}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={record.status === 'present' ? 'default' : 'secondary'}
-                          className={record.status === 'present' ? 'bg-green-500' : record.status === 'late' ? 'bg-amber-500' : ''}
+                        <Badge
+                          className={
+                            record.status === 'present'
+                              ? 'bg-green-500'
+                              : 'bg-amber-500'
+                          }
                         >
                           {record.status}
                         </Badge>
@@ -188,9 +204,7 @@ export function QRCodeDisplay({
         </div>
 
         <div className="flex justify-end mt-4">
-          <Button onClick={onClose}>
-            Close
-          </Button>
+          <Button onClick={onClose}>Close</Button>
         </div>
       </DialogContent>
     </Dialog>

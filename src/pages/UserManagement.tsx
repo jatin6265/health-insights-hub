@@ -12,10 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Search, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building, KeyRound, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building, KeyRound, Trash2, Loader2, Tags } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { AppRole, UserStatus, UserWithRole } from '@/types/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
+import { CategoryAssignment } from '@/components/user/CategoryAssignment';
 
 export default function UserManagement() {
   const { user, loading, isAdmin } = useAuth();
@@ -35,6 +36,7 @@ export default function UserManagement() {
   const [updating, setUpdating] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [categoryUser, setCategoryUser] = useState<UserWithRole | null>(null);
 
   useEffect(() => {
     if (isAdmin) {
@@ -535,6 +537,16 @@ export default function UserManagement() {
                             >
                               Edit
                             </Button>
+                            {u.role === 'trainee' && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setCategoryUser(u)}
+                                title="Assign Categories"
+                              >
+                                <Tags className="h-3 w-3" />
+                              </Button>
+                            )}
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -692,12 +704,23 @@ export default function UserManagement() {
                     Resetting...
                   </>
                 ) : (
-                  'Reset Password'
+              'Reset Password'
                 )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Category Assignment Dialog */}
+        {categoryUser && (
+          <CategoryAssignment
+            userId={categoryUser.id}
+            userName={categoryUser.full_name || categoryUser.email || 'User'}
+            isOpen={!!categoryUser}
+            onClose={() => setCategoryUser(null)}
+            onUpdated={fetchUsers}
+          />
+        )}
       </div>
     </div>
   );

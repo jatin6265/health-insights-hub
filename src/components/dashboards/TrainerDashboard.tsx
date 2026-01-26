@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
@@ -6,6 +6,12 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import {
   Calendar,
   Users,
@@ -17,9 +23,12 @@ import {
   BarChart3,
   ClipboardList,
   UserPlus,
+  Filter,
+  CalendarIcon,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Session, SessionStatus } from '@/types/auth';
+import { Session, SessionStatus, Training } from '@/types/auth';
 import { QRCodeDisplay } from '@/components/attendance/QRCodeDisplay';
 import { DashboardStatsSkeleton, DashboardSessionsSkeleton } from '@/components/ui/dashboard-skeleton';
 import { SessionAttendanceDetails } from '@/components/training/SessionAttendanceDetails';
@@ -35,6 +44,7 @@ interface SessionWithDetails extends Session {
 export function TrainerDashboard() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
+  const [trainings, setTrainings] = useState<Training[]>([]);
   const [stats, setStats] = useState({
     totalSessions: 0,
     activeSessions: 0,
@@ -43,6 +53,11 @@ export function TrainerDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [qrSession, setQrSession] = useState<SessionWithDetails | null>(null);
+  
+  // Filter states
+  const [programFilter, setProgramFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
     if (user) {
@@ -54,7 +69,15 @@ export function TrainerDashboard() {
     if (!user) return;
 
     try {
-      // Fetch trainer's sessions
+      // Fetch all trainings for filter dropdown
+      const { data: trainingsData } = await supabase
+        .from('trainings')
+        .select('*')
+        .order('title');
+      
+      setTrainings((trainingsData || []).map(t => ({ ...t, is_active: t.is_active ?? true })));
+
+      // Fetch trainer's sessions - SORT BY LATEST FIRST
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
         .select(`
@@ -62,7 +85,8 @@ export function TrainerDashboard() {
           trainings (title)
         `)
         .eq('trainer_id', user.id)
-        .order('scheduled_date', { ascending: true });
+        .order('scheduled_date', { ascending: false })
+        .order('start_time', { ascending: false });
 
       if (sessionsError) throw sessionsError;
 
@@ -229,6 +253,39 @@ const handleRefreshQR = async (sessionId: string) => {
     }
   };
 
+  // Filter sessions based on program and date range
+  const filteredSessions = useMemo(() => {
+    return sessions.filter(session => {
+      // Program filter
+      if (programFilter !== 'all' && session.training_id !== programFilter) {
+        return false;
+      }
+      
+      // Date range filter
+      const sessionDate = new Date(session.scheduled_date);
+      if (dateFrom && sessionDate < dateFrom) {
+        return false;
+      }
+      if (dateTo) {
+        const endOfDay = new Date(dateTo);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (sessionDate > endOfDay) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [sessions, programFilter, dateFrom, dateTo]);
+
+  const clearFilters = () => {
+    setProgramFilter('all');
+    setDateFrom(undefined);
+    setDateTo(undefined);
+  };
+
+  const hasActiveFilters = programFilter !== 'all' || dateFrom || dateTo;
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -306,34 +363,102 @@ const handleRefreshQR = async (sessionId: string) => {
 
       {/* Sessions List */}
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">Your Sessions</h2>
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Your Sessions</h2>
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="gap-1">
+                  {filteredSessions.length} of {sessions.length}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/reports">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Reports
+                </Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link to="/training">
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  New Session
+                </Link>
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" asChild>
-              <Link to="/reports">
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Reports
-              </Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link to="/training">
-                <PlusCircle className="w-4 h-4 mr-2" />
-                New Session
-              </Link>
-            </Button>
+          
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/50 rounded-lg">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            
+            {/* Program Filter */}
+            <Select value={programFilter} onValueChange={setProgramFilter}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="All Programs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Programs</SelectItem>
+                {trainings.map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Date From */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  {dateFrom ? format(dateFrom, 'MMM d, yyyy') : 'From Date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={dateFrom}
+                  onSelect={setDateFrom}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            
+            {/* Date To */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  {dateTo ? format(dateTo, 'MMM d, yyyy') : 'To Date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={dateTo}
+                  onSelect={setDateTo}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 gap-1">
+                <X className="w-4 h-4" />
+                Clear
+              </Button>
+            )}
           </div>
         </div>
 
-        {sessions.length === 0 ? (
+        {filteredSessions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            No sessions assigned yet
+            {hasActiveFilters ? 'No sessions match your filters' : 'No sessions assigned yet'}
           </div>
         ) : (
           <div className="space-y-4">
-            {sessions.slice(0, 5).map((session) => (
+            {filteredSessions.map((session) => (
               <div
                 key={session.id}
                 className="flex items-center justify-between p-4 border rounded-lg"

@@ -85,17 +85,26 @@ export function TraineeDashboard() {
         .select('session_id')
         .eq('user_id', user.id);
 
-      if (partError) throw partError;
+      if (partError) {
+        console.error('Error fetching participations:', partError);
+        throw partError;
+      }
 
       const sessionIds = participations?.map(p => p.session_id) || [];
 
       if (sessionIds.length === 0) {
         setSessions([]);
+        setStats({
+          totalSessions: 0,
+          attended: 0,
+          absent: 0,
+          attendanceRate: 100,
+        });
         setLoading(false);
         return;
       }
 
-      // Fetch session details
+      // Fetch session details with training info
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
         .select(`
@@ -105,14 +114,21 @@ export function TraineeDashboard() {
         .in('id', sessionIds)
         .order('scheduled_date', { ascending: false });
 
-      if (sessionsError) throw sessionsError;
+      if (sessionsError) {
+        console.error('Error fetching sessions:', sessionsError);
+        throw sessionsError;
+      }
 
-      // Fetch attendance records
-      const { data: attendanceData } = await supabase
+      // Fetch attendance records for this user
+      const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
         .select('*')
         .eq('user_id', user.id)
         .in('session_id', sessionIds);
+
+      if (attendanceError) {
+        console.error('Error fetching attendance:', attendanceError);
+      }
 
       const attendanceMap = new Map(
         attendanceData?.map(a => [a.session_id, a]) || []
@@ -128,18 +144,20 @@ export function TraineeDashboard() {
 
       setSessions(sessionsWithAttendance);
 
-      // Calculate stats
-      const attended = attendanceData?.filter(a => 
-        a.status === 'present' || a.status === 'late'
-      ).length || 0;
-      const absent = attendanceData?.filter(a => a.status === 'absent').length || 0;
-      const total = sessionsWithAttendance.filter(s => s.status === 'completed').length;
+      // Calculate stats based on completed sessions only
+      const completedSessions = sessionsWithAttendance.filter(s => s.status === 'completed');
+      const attended = completedSessions.filter(s => 
+        s.attendance?.status === 'present' || s.attendance?.status === 'late'
+      ).length;
+      const absent = completedSessions.filter(s => 
+        s.attendance?.status === 'absent'
+      ).length;
 
       setStats({
         totalSessions: sessionsWithAttendance.length,
         attended,
         absent,
-        attendanceRate: total > 0 ? Math.round((attended / total) * 100) : 100,
+        attendanceRate: completedSessions.length > 0 ? Math.round((attended / completedSessions.length) * 100) : 100,
       });
     } catch (error) {
       console.error('Error fetching trainee data:', error);

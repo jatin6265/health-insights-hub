@@ -13,6 +13,7 @@ import Reports from "./pages/Reports";
 import UserManagement from "./pages/UserManagement";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import AuthCallback from "./pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<UserManagement />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -149,8 +149,9 @@ export function TraineeDashboard() {
       const attended = completedSessions.filter(s => 
         s.attendance?.status === 'present' || s.attendance?.status === 'late'
       ).length;
+      // Count absent as: explicit 'absent' status OR no attendance record for completed session
       const absent = completedSessions.filter(s => 
-        s.attendance?.status === 'absent'
+        s.attendance?.status === 'absent' || !s.attendance
       ).length;
 
       setStats({

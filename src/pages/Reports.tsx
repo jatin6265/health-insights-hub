@@ -116,8 +116,8 @@ export default function Reports() {
         .eq('is_active', true);
       setTrainings(trainingsData || []);
 
-      // Build session query
-      let sessionQuery = supabase.from('sessions').select('id, title, scheduled_date, training_id, trainings(title)');
+      // Build session query - include status for filtering completed sessions
+      let sessionQuery = supabase.from('sessions').select('id, title, scheduled_date, training_id, status, trainings(title)');
       
       if (!isAdmin) {
         sessionQuery = sessionQuery.eq('trainer_id', user.id);
@@ -145,7 +145,18 @@ export default function Reports() {
         .select('session_id, status')
         .in('session_id', sessionIds);
 
-      // Calculate overall stats
+      // Fetch participant counts per session
+      const { data: participantsData } = await supabase
+        .from('session_participants')
+        .select('session_id')
+        .in('session_id', sessionIds);
+
+      const participantCountMap = new Map<string, number>();
+      participantsData?.forEach(p => {
+        participantCountMap.set(p.session_id, (participantCountMap.get(p.session_id) || 0) + 1);
+      });
+
+      // Calculate overall stats - include absent for enrolled but no attendance
       const overall: AttendanceStats = { present: 0, late: 0, absent: 0, total: 0 };
       attendance?.forEach(a => {
         overall.total++;
@@ -153,6 +164,28 @@ export default function Reports() {
         else if (a.status === 'late') overall.late++;
         else if (a.status === 'absent') overall.absent++;
       });
+
+      // Add absent count for participants with no attendance record in completed sessions
+      const completedSessionIds = sessions.filter(s => s.status === 'completed').map(s => s.id);
+      const attendanceBySession = new Map<string, Set<string>>();
+      attendance?.forEach(a => {
+        if (!attendanceBySession.has(a.session_id)) {
+          attendanceBySession.set(a.session_id, new Set());
+        }
+        attendanceBySession.get(a.session_id)!.add(a.session_id);
+      });
+
+      // Count missing attendance as absent
+      completedSessionIds.forEach(sid => {
+        const totalParticipants = participantCountMap.get(sid) || 0;
+        const recordedCount = attendance?.filter(a => a.session_id === sid).length || 0;
+        const missingAbsent = totalParticipants - recordedCount;
+        if (missingAbsent > 0) {
+          overall.absent += missingAbsent;
+          overall.total += missingAbsent;
+        }
+      });
+
       setOverallStats(overall);
 
       // Calculate per-session stats

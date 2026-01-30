@@ -35,6 +35,7 @@ import {
   DashboardScanCardSkeleton 
 } from '@/components/ui/dashboard-skeleton';
 import { SelfEnrollment } from '@/components/training/SelfEnrollment';
+import { TraineeSessionJoin } from '@/components/training/TraineeSessionJoin';
 
 interface SessionWithAttendance extends Session {
   training?: {
@@ -304,7 +305,7 @@ export function TraineeDashboard() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Mark Attendance</h2>
             <p className="text-sm text-muted-foreground">
-              Scan the QR code displayed by your trainer
+              Scan the QR code or request to join your assigned sessions
             </p>
           </div>
           <Button size="lg" onClick={() => setShowScanner(true)}>
@@ -313,6 +314,9 @@ export function TraineeDashboard() {
           </Button>
         </div>
       </Card>
+
+      {/* My Assigned Sessions - Join Request */}
+      <TraineeSessionJoin onScanQR={() => setShowScanner(true)} />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -33,6 +33,7 @@ import { QRCodeDisplay } from '@/components/attendance/QRCodeDisplay';
 import { DashboardStatsSkeleton, DashboardSessionsSkeleton } from '@/components/ui/dashboard-skeleton';
 import { SessionAttendanceDetails } from '@/components/training/SessionAttendanceDetails';
 import { ParticipantManagement } from '@/components/training/ParticipantManagement';
+import { TrainerJoinRequests } from '@/components/training/TrainerJoinRequests';
 
 interface SessionWithDetails extends Session {
   training?: {
@@ -299,6 +300,10 @@ const handleRefreshQR = async (sessionId: string) => {
     <Tabs defaultValue="overview" className="space-y-6">
       <TabsList>
         <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="requests" className="flex items-center gap-2">
+          <Users className="w-4 h-4" />
+          Join Requests
+        </TabsTrigger>
         <TabsTrigger value="participants" className="flex items-center gap-2">
           <UserPlus className="w-4 h-4" />
           Participants
@@ -308,6 +313,10 @@ const handleRefreshQR = async (sessionId: string) => {
           Attendance Details
         </TabsTrigger>
       </TabsList>
+
+      <TabsContent value="requests">
+        <TrainerJoinRequests />
+      </TabsContent>
 
       <TabsContent value="overview" className="space-y-6">
       {/* Stats Cards */}

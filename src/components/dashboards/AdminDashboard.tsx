@@ -24,11 +24,13 @@ import {
   TrendingUp,
   BarChart3,
   ClipboardList,
+  Edit,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppRole, UserStatus } from '@/types/auth';
 import { DashboardStatsSkeleton, DashboardTableSkeleton } from '@/components/ui/dashboard-skeleton';
 import { SessionAttendanceDetails } from '@/components/training/SessionAttendanceDetails';
+import { AdminManualAttendance } from '@/components/training/AdminManualAttendance';
 
 interface PendingUser {
   id: string;
@@ -198,6 +200,10 @@ export function AdminDashboard() {
           <ClipboardList className="w-4 h-4" />
           Attendance Details
         </TabsTrigger>
+        <TabsTrigger value="manual-attendance" className="flex items-center gap-2">
+          <Edit className="w-4 h-4" />
+          Manual Attendance
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="space-y-6">
@@ -362,6 +368,10 @@ export function AdminDashboard() {
 
       <TabsContent value="attendance">
         <SessionAttendanceDetails />
+      </TabsContent>
+
+      <TabsContent value="manual-attendance">
+        <AdminManualAttendance />
       </TabsContent>
     </Tabs>
   );

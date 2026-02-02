@@ -119,13 +119,14 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
 
       if (partError) throw partError;
 
-      // Filter to upcoming/active sessions
+      // Filter to upcoming/active sessions (exclude cancelled)
       const upcomingSessions = (participations || [])
         .filter(p => {
           const session = p.sessions as any;
           return session && 
             session.scheduled_date >= today && 
-            ['scheduled', 'active'].includes(session.status);
+            ['scheduled', 'active'].includes(session.status) &&
+            session.status !== 'cancelled';
         })
         .map(p => p.sessions as any);
 

@@ -38,6 +38,8 @@ import {
   User,
   Send,
   Loader2,
+  Ban,
+  CheckCircle,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -290,13 +292,58 @@ export function SessionManagement() {
   };
 
   const getStatusBadge = (status: SessionStatus) => {
-    const variants: Record<SessionStatus, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-      scheduled: 'secondary',
-      active: 'default',
-      completed: 'outline',
-      cancelled: 'destructive',
+    const variants: Record<SessionStatus, { variant: 'default' | 'secondary' | 'outline' | 'destructive', className?: string }> = {
+      scheduled: { variant: 'secondary' },
+      active: { variant: 'default', className: 'bg-green-500 animate-pulse' },
+      completed: { variant: 'outline' },
+      cancelled: { variant: 'destructive' },
     };
-    return <Badge variant={variants[status]} className="capitalize">{status}</Badge>;
+    const config = variants[status];
+    return (
+      <Badge 
+        variant={config.variant} 
+        className={`capitalize ${config.className || ''}`}
+      >
+        {status}
+      </Badge>
+    );
+  };
+
+  const handleCancelSession = async (sessionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('sessions')
+        .update({ status: 'cancelled' })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast.success('Session cancelled');
+      fetchSessions();
+    } catch (error) {
+      console.error('Error cancelling session:', error);
+      toast.error('Failed to cancel session');
+    }
+  };
+
+  const handleCompleteSession = async (sessionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('sessions')
+        .update({ 
+          status: 'completed',
+          actual_end_time: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast.success('Session marked as completed');
+      fetchSessions();
+    } catch (error) {
+      console.error('Error completing session:', error);
+      toast.error('Failed to complete session');
+    }
   };
 
   if (loading) {
@@ -393,7 +440,7 @@ export function SessionManagement() {
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => handleSendReminder(session.id)}
-                        disabled={sendingReminder === session.id}
+                        disabled={sendingReminder === session.id || session.status === 'cancelled'}
                       >
                         {sendingReminder === session.id ? (
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -401,6 +448,28 @@ export function SessionManagement() {
                           <Send className="w-4 h-4 mr-2" />
                         )}
                         Send Reminder
+                      </DropdownMenuItem>
+                      {session.status === 'active' && (
+                        <DropdownMenuItem onClick={() => handleCompleteSession(session.id)}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Complete Session
+                        </DropdownMenuItem>
+                      )}
+                      {session.status !== 'cancelled' && session.status !== 'completed' && (
+                        <DropdownMenuItem 
+                          className="text-amber-600"
+                          onClick={() => handleCancelSession(session.id)}
+                        >
+                          <Ban className="w-4 h-4 mr-2" />
+                          Cancel Session
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem 
+                        className="text-destructive"
+                        onClick={() => setDeletingSession(session)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         className="text-destructive"

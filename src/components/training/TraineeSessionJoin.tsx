@@ -13,6 +13,7 @@ import {
   XCircle,
   Loader2,
   QrCode,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,9 +34,10 @@ interface AssignedSession {
 
 interface TraineeSessionJoinProps {
   onScanQR?: (sessionId: string) => void;
+  onRefreshData?: () => void;
 }
 
-export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
+export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJoinProps) {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<AssignedSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,10 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
   useEffect(() => {
     if (user) {
       fetchAssignedSessions();
-      subscribeToUpdates();
+      const unsubscribe = subscribeToUpdates();
+      return () => {
+        unsubscribe?.();
+      };
     }
   }, [user]);
 
@@ -63,6 +68,20 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
         },
         () => {
           fetchAssignedSessions();
+          onRefreshData?.();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attendance',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchAssignedSessions();
+          onRefreshData?.();
         }
       )
       .subscribe();
@@ -156,8 +175,12 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
         attendance_status: attendanceMap.get(s.id) || null,
       }));
 
-      // Sort by date
-      mapped.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+      // Sort by status (active first) then by date
+      mapped.sort((a, b) => {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (b.status === 'active' && a.status !== 'active') return 1;
+        return a.scheduled_date.localeCompare(b.scheduled_date);
+      });
       setSessions(mapped);
     } catch (error) {
       console.error('Error fetching sessions:', error);
@@ -203,7 +226,32 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
     });
   };
 
+  const getSessionCardStyle = (session: AssignedSession) => {
+    if (session.status === 'active') {
+      return 'border-green-500/50 bg-green-500/5';
+    }
+    return 'border-amber-500/30 bg-amber-500/5';
+  };
+
   const getStatusBadge = (session: AssignedSession) => {
+    // Session status badge
+    if (session.status === 'active') {
+      return (
+        <Badge className="bg-green-500 animate-pulse">
+          <Zap className="w-3 h-3 mr-1" />
+          Live Now
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-amber-500/80 text-amber-950">
+        <Clock className="w-3 h-3 mr-1" />
+        Upcoming
+      </Badge>
+    );
+  };
+
+  const getAttendanceBadge = (session: AssignedSession) => {
     // If already has attendance marked
     if (session.attendance_status && session.attendance_status !== 'absent') {
       return (
@@ -218,7 +266,7 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
     switch (session.join_request_status) {
       case 'pending':
         return (
-          <Badge variant="outline" className="border-yellow-500 text-yellow-600">
+          <Badge variant="outline" className="border-amber-500 text-amber-600">
             <Clock className="w-3 h-3 mr-1" />
             Pending Approval
           </Badge>
@@ -252,116 +300,183 @@ export function TraineeSessionJoin({ onScanQR }: TraineeSessionJoinProps) {
     );
   }
 
-  return (
-    <Card className="p-6">
-      <h2 className="text-lg font-semibold text-foreground mb-4">My Assigned Sessions</h2>
+  const activeSessions = sessions.filter(s => s.status === 'active');
+  const upcomingSessions = sessions.filter(s => s.status === 'scheduled');
 
-      {sessions.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No upcoming sessions assigned to you</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              className="p-4 border rounded-lg bg-card"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-medium text-foreground">{session.title}</h3>
-                  <p className="text-sm text-muted-foreground">{session.training_title}</p>
+  return (
+    <div className="space-y-6">
+      {/* Active Sessions - Can mark attendance */}
+      {activeSessions.length > 0 && (
+        <Card className="p-6 border-green-500/50 bg-green-500/5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+            <h2 className="text-lg font-semibold text-foreground">Active Sessions - Mark Attendance</h2>
+          </div>
+          <div className="space-y-4">
+            {activeSessions.map((session) => (
+              <div
+                key={session.id}
+                className={`p-4 border rounded-lg ${getSessionCardStyle(session)}`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-medium text-foreground">{session.title}</h3>
+                    <p className="text-sm text-muted-foreground">{session.training_title}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getAttendanceBadge(session)}
+                    {getStatusBadge(session)}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {getStatusBadge(session)}
-                  {session.status === 'active' && (
-                    <Badge className="bg-blue-500">Live</Badge>
+
+                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <span>{formatDate(session.scheduled_date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    <span>{session.start_time} - {session.end_time}</span>
+                  </div>
+                  {session.location && (
+                    <div className="flex items-center gap-2 col-span-2">
+                      <MapPin className="w-4 h-4" />
+                      <span>{session.location}</span>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formatDate(session.scheduled_date)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  <span>{session.start_time} - {session.end_time}</span>
-                </div>
-                {session.location && (
-                  <div className="flex items-center gap-2 col-span-2">
-                    <MapPin className="w-4 h-4" />
-                    <span>{session.location}</span>
+                {session.trainer_name && (
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Trainer: {session.trainer_name}
+                  </p>
+                )}
+
+                {/* Action buttons - Only for active sessions without attendance */}
+                {(!session.attendance_status || session.attendance_status === 'absent') && (
+                  <div className="flex gap-2 flex-wrap">
+                    {/* QR Scan button */}
+                    {onScanQR && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onScanQR(session.id)}
+                        className="border-green-500/50 hover:bg-green-500/10"
+                      >
+                        <QrCode className="w-4 h-4 mr-2" />
+                        Scan QR
+                      </Button>
+                    )}
+
+                    {/* Join request button - Only for active sessions */}
+                    {session.join_request_status === 'none' && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleRequestJoin(session.id)}
+                        disabled={requesting === session.id}
+                      >
+                        {requesting === session.id ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-2" />
+                        )}
+                        Request to Join
+                      </Button>
+                    )}
+
+                    {session.join_request_status === 'pending' && (
+                      <Button size="sm" variant="outline" disabled>
+                        <Clock className="w-4 h-4 mr-2" />
+                        Awaiting Approval
+                      </Button>
+                    )}
+
+                    {session.join_request_status === 'rejected' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRequestJoin(session.id)}
+                        disabled={requesting === session.id}
+                      >
+                        Request Again
+                      </Button>
+                    )}
                   </div>
                 )}
+
+                {session.attendance_status && session.attendance_status !== 'absent' && (
+                  <p className="text-sm text-green-600 font-medium">
+                    ✓ Attendance marked as {session.attendance_status}
+                  </p>
+                )}
               </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-              {session.trainer_name && (
-                <p className="text-xs text-muted-foreground mb-3">
-                  Trainer: {session.trainer_name}
-                </p>
-              )}
+      {/* Upcoming Sessions - View only, no actions */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-5 h-5 text-amber-500" />
+          <h2 className="text-lg font-semibold text-foreground">Upcoming Sessions</h2>
+          {upcomingSessions.length > 0 && (
+            <Badge variant="secondary" className="ml-2">{upcomingSessions.length}</Badge>
+          )}
+        </div>
 
-              {/* Action buttons */}
-              {!session.attendance_status || session.attendance_status === 'absent' ? (
-                <div className="flex gap-2">
-                  {/* QR Scan button for active sessions */}
-                  {session.status === 'active' && onScanQR && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onScanQR(session.id)}
-                    >
-                      <QrCode className="w-4 h-4 mr-2" />
-                      Scan QR
-                    </Button>
-                  )}
+        {upcomingSessions.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No upcoming sessions assigned</p>
+            <p className="text-sm mt-1">Check the "Browse Sessions" tab to enroll in available sessions</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {upcomingSessions.map((session) => (
+              <div
+                key={session.id}
+                className={`p-4 border rounded-lg ${getSessionCardStyle(session)}`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-medium text-foreground">{session.title}</h3>
+                    <p className="text-sm text-muted-foreground">{session.training_title}</p>
+                  </div>
+                  {getStatusBadge(session)}
+                </div>
 
-                  {/* Join request button */}
-                  {session.join_request_status === 'none' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleRequestJoin(session.id)}
-                      disabled={requesting === session.id}
-                    >
-                      {requesting === session.id ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4 mr-2" />
-                      )}
-                      Request to Join
-                    </Button>
-                  )}
-
-                  {session.join_request_status === 'pending' && (
-                    <Button size="sm" variant="outline" disabled>
-                      <Clock className="w-4 h-4 mr-2" />
-                      Awaiting Approval
-                    </Button>
-                  )}
-
-                  {session.join_request_status === 'rejected' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRequestJoin(session.id)}
-                      disabled={requesting === session.id}
-                    >
-                      Request Again
-                    </Button>
+                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <span>{formatDate(session.scheduled_date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    <span>{session.start_time} - {session.end_time}</span>
+                  </div>
+                  {session.location && (
+                    <div className="flex items-center gap-2 col-span-2">
+                      <MapPin className="w-4 h-4" />
+                      <span>{session.location}</span>
+                    </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-sm text-green-600">
-                  ✓ Attendance already marked
+
+                {session.trainer_name && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Trainer: {session.trainer_name}
+                  </p>
+                )}
+
+                <p className="text-xs text-amber-600 mt-3">
+                  ⏳ You can mark attendance or request to join once the session starts
                 </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

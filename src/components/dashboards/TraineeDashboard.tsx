@@ -37,6 +37,9 @@ import {
 import { SelfEnrollment } from '@/components/training/SelfEnrollment';
 import { TraineeSessionJoin } from '@/components/training/TraineeSessionJoin';
 
+// Refresh callback type
+type RefreshCallback = () => void;
+
 interface SessionWithAttendance extends Session {
   training?: {
     title: string;
@@ -299,111 +302,11 @@ export function TraineeDashboard() {
       </div>
 
       <TabsContent value="dashboard" className="space-y-6">
-      {/* Scan Button - Prominent */}
-      <Card className="p-6 bg-primary/5 border-primary/20">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Mark Attendance</h2>
-            <p className="text-sm text-muted-foreground">
-              Scan the QR code or request to join your assigned sessions
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setShowScanner(true)}>
-            <QrCode className="w-5 h-5 mr-2" />
-            Scan QR Code
-          </Button>
-        </div>
-      </Card>
-
-      {/* My Assigned Sessions - Join Request */}
-      <TraineeSessionJoin onScanQR={() => setShowScanner(true)} />
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Sessions</p>
-              <p className="text-2xl font-bold text-foreground">{stats.totalSessions}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-500" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Attended</p>
-              <p className="text-2xl font-bold text-foreground">{stats.attended}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-              <XCircle className="w-6 h-6 text-destructive" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Absent</p>
-              <p className="text-2xl font-bold text-foreground">{stats.absent}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Attendance Rate</p>
-              <p className="text-lg font-bold text-foreground">{stats.attendanceRate}%</p>
-            </div>
-            <Progress value={stats.attendanceRate} className="h-2" />
-          </div>
-        </Card>
-      </div>
-
-      {/* Active Sessions - Mark Attendance */}
-      {activeSessions.length > 0 && (
-        <Card className="p-6 border-green-500/50 bg-green-500/5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-            <h2 className="text-lg font-semibold text-foreground">Active Sessions</h2>
-          </div>
-          <div className="space-y-4">
-            {activeSessions.map((session) => (
-              <div
-                key={session.id}
-                className="flex items-center justify-between p-4 bg-card border rounded-lg"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-foreground">{session.title}</h3>
-                    {getSessionStatusBadge(session.status)}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {session.training?.title} • {session.location || 'No location'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {session.attendance ? (
-                    getAttendanceBadge(session.attendance.status as AttendanceStatus)
-                  ) : (
-                    <Button onClick={() => setShowScanner(true)}>
-                      <Scan className="w-4 h-4 mr-2" />
-                      Scan QR
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* My Assigned Sessions - Join Request & QR Scan */}
+      <TraineeSessionJoin 
+        onScanQR={() => setShowScanner(true)} 
+        onRefreshData={fetchTraineeData}
+      />
 
       {/* Upcoming Sessions */}
       <Card className="p-6">

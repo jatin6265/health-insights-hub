@@ -309,40 +309,7 @@ export function TraineeDashboard() {
       />
 
       {/* Upcoming Sessions */}
-      <Card className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Upcoming Sessions</h2>
-        </div>
-        {upcomingSessions.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            No upcoming sessions
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {upcomingSessions.slice(0, 5).map((session) => (
-              <div
-                key={session.id}
-                className="flex items-center justify-between p-4 border rounded-lg"
-              >
-                <div className="space-y-1">
-                  <h3 className="font-medium text-foreground">{session.title}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {session.training?.title} • {session.scheduled_date} • {session.start_time}
-                  </p>
-                  {session.location && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {session.location}
-                    </p>
-                  )}
-                </div>
-                {getSessionStatusBadge(session.status)}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+
 
       {/* Attendance History */}
       <Card className="p-6">

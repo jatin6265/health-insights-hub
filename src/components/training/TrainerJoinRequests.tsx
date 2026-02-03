@@ -151,14 +151,14 @@ export function TrainerJoinRequests() {
 
       if (updateError) throw updateError;
 
-      // Mark attendance as present
+      // Mark attendance as present using the REQUEST timestamp (not approval time)
       const { error: attendanceError } = await supabase
         .from('attendance')
         .upsert({
           session_id: request.session_id,
           user_id: request.user_id,
           status: 'present',
-          join_time: new Date().toISOString(),
+          join_time: request.requested_at, // Use the original request timestamp
         }, {
           onConflict: 'session_id,user_id',
         });
@@ -171,11 +171,11 @@ export function TrainerJoinRequests() {
             session_id: request.session_id,
             user_id: request.user_id,
             status: 'present',
-            join_time: new Date().toISOString(),
+            join_time: request.requested_at, // Use the original request timestamp
           });
       }
 
-      toast.success(`Approved join request for ${request.trainee_name || 'trainee'}`);
+      toast.success(`Approved attendance for ${request.trainee_name || 'trainee'}`);
       fetchPendingRequests();
     } catch (error) {
       console.error('Error approving request:', error);

@@ -369,7 +369,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
                       </Button>
                     )}
 
-                    {/* Join request button - Only for active sessions */}
+                    {/* Mark Attendance button - Only for active sessions */}
                     {session.join_request_status === 'none' && (
                       <Button
                         size="sm"
@@ -381,7 +381,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
                         ) : (
                           <Send className="w-4 h-4 mr-2" />
                         )}
-                        Request to Join
+                        Mark Attendance
                       </Button>
                     )}
 

@@ -47,7 +47,7 @@ import { Training } from '@/types/auth';
 import { TrainingForm } from './TrainingForm';
 
 export function TrainingManagement() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -271,13 +271,16 @@ export function TrainingManagement() {
                         <Pencil className="w-4 h-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-destructive"
-                        onClick={() => setDeletingTraining(training)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
+                      {/* Only admins can delete training programs */}
+                      {isAdmin && (
+                        <DropdownMenuItem 
+                          className="text-destructive"
+                          onClick={() => setDeletingTraining(training)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

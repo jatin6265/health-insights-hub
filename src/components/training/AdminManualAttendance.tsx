@@ -365,7 +365,17 @@ export function AdminManualAttendance() {
           </div>
           {selectedSessionDetails.status === 'cancelled' && (
             <p className="text-sm text-destructive mt-2">
-              This session has been cancelled. Attendance records may not be applicable.
+              This session has been cancelled. Attendance cannot be marked.
+            </p>
+          )}
+          {selectedSessionDetails.status === 'completed' && (
+            <p className="text-sm text-amber-600 mt-2">
+              This session has ended. Manual attendance is not allowed for completed sessions.
+            </p>
+          )}
+          {selectedSessionDetails.status === 'scheduled' && (
+            <p className="text-sm text-muted-foreground mt-2">
+              This session has not started yet. Manual attendance will be available once the session is active.
             </p>
           )}
         </div>
@@ -428,14 +438,21 @@ export function AdminManualAttendance() {
                     : '-'}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openEditDialog(participant)}
-                  >
-                    <Edit className="w-4 h-4 mr-1" />
-                    Mark
-                  </Button>
+                  {/* Manual attendance only allowed for active (live) sessions */}
+                  {selectedSessionDetails?.status === 'active' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEditDialog(participant)}
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Mark
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {selectedSessionDetails?.status === 'scheduled' ? 'Not started' : 'Session ended'}
+                    </span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

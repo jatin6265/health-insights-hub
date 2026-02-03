@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useSessionAutoComplete } from "@/hooks/useSessionAutoComplete";
 import { AdminDashboard } from "@/components/dashboards/AdminDashboard";
 import { TrainerDashboard } from "@/components/dashboards/TrainerDashboard";
 import { TraineeDashboard } from "@/components/dashboards/TraineeDashboard";
@@ -11,7 +12,10 @@ import { useEffect } from "react";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, loading, role, isActive, isPending, signOut, profile } = useAuth();
+  const { user, loading, role, isActive, isPending, signOut, profile, isAdmin, isTrainer } = useAuth();
+  
+  // Auto-complete sessions check every 30 seconds (only for admins/trainers)
+  useSessionAutoComplete((isAdmin || isTrainer) ? 30000 : 0);
 
   useEffect(() => {
     if (!loading && !user) {

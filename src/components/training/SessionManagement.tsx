@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +58,7 @@ interface SessionWithDetails extends Session {
 }
 
 export function SessionManagement() {
+  const { user, isAdmin, isTrainer } = useAuth();
   const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -71,13 +73,20 @@ export function SessionManagement() {
 
   const fetchSessions = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('sessions')
         .select(`
           *,
           trainings (title)
         `)
         .order('scheduled_date', { ascending: false });
+
+      // Trainers only see their assigned sessions
+      if (isTrainer && !isAdmin && user) {
+        query = query.eq('trainer_id', user.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -346,6 +355,38 @@ export function SessionManagement() {
     }
   };
 
+  // Check if session can be edited (only scheduled sessions, not active/completed/cancelled)
+  const canEditSession = (session: SessionWithDetails): boolean => {
+    // Once session has started or ended, no one can edit
+    if (session.status === 'active' || session.status === 'completed' || session.status === 'cancelled') {
+      return false;
+    }
+    return true;
+  };
+
+  // Check if session can be deleted
+  const canDeleteSession = (session: SessionWithDetails): boolean => {
+    // Admins can delete any session (including ended ones)
+    if (isAdmin) {
+      return true;
+    }
+    
+    // Trainers can only delete their own sessions that haven't ended
+    if (isTrainer && session.trainer_id === user?.id) {
+      // Can't delete if session is completed or cancelled
+      if (session.status === 'completed' || session.status === 'cancelled') {
+        return false;
+      }
+      // Can't delete if session is active (started)
+      if (session.status === 'active') {
+        return false;
+      }
+      return true;
+    }
+    
+    return false;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -434,10 +475,13 @@ export function SessionManagement() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditForm(session)}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
+                      {/* Edit - only for scheduled sessions */}
+                      {canEditSession(session) && (
+                        <DropdownMenuItem onClick={() => openEditForm(session)}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem 
                         onClick={() => handleSendReminder(session.id)}
                         disabled={sendingReminder === session.id || session.status === 'cancelled'}
@@ -464,20 +508,16 @@ export function SessionManagement() {
                           Cancel Session
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem 
-                        className="text-destructive"
-                        onClick={() => setDeletingSession(session)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-destructive"
-                        onClick={() => setDeletingSession(session)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
+                      {/* Delete - based on role and session status */}
+                      {canDeleteSession(session) && (
+                        <DropdownMenuItem 
+                          className="text-destructive"
+                          onClick={() => setDeletingSession(session)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

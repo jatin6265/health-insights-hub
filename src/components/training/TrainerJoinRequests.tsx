@@ -26,6 +26,31 @@ interface JoinRequest {
   session_title: string;
   session_date: string;
   session_time: string;
+  session_start_time: string;
+  late_threshold_minutes: number;
+  partial_threshold_minutes: number;
+}
+
+/**
+ * Calculate attendance type based on timing
+ * Uses the original request timestamp, NOT approval time
+ */
+function calculateAttendanceType(
+  requestedAt: Date,
+  sessionStart: Date,
+  lateThreshold: number,
+  partialThreshold: number
+): 'on_time' | 'late' | 'partial' {
+  const delayMs = requestedAt.getTime() - sessionStart.getTime();
+  const delayMinutes = delayMs / 60000;
+
+  if (delayMinutes <= lateThreshold) {
+    return 'on_time';
+  } else if (delayMinutes <= partialThreshold) {
+    return 'late';
+  } else {
+    return 'partial';
+  }
 }
 
 export function TrainerJoinRequests() {
@@ -71,7 +96,7 @@ export function TrainerJoinRequests() {
       // Get sessions where current user is trainer
       const { data: trainerSessions, error: sessionsError } = await supabase
         .from('sessions')
-        .select('id, title, scheduled_date, start_time')
+        .select('id, title, scheduled_date, start_time, late_threshold_minutes, partial_threshold_minutes')
         .eq('trainer_id', user.id)
         .in('status', ['scheduled', 'active']);
 
@@ -124,13 +149,16 @@ export function TrainerJoinRequests() {
           session_title: session?.title || 'Unknown Session',
           session_date: session?.scheduled_date || '',
           session_time: session?.start_time || '',
+          session_start_time: session?.start_time || '',
+          late_threshold_minutes: session?.late_threshold_minutes ?? 15,
+          partial_threshold_minutes: session?.partial_threshold_minutes ?? 30,
         };
       });
 
       setRequests(mapped);
     } catch (error) {
       console.error('Error fetching requests:', error);
-      toast.error('Failed to load join requests');
+      toast.error('Failed to load attendance requests');
     } finally {
       setLoading(false);
     }
@@ -151,19 +179,33 @@ export function TrainerJoinRequests() {
 
       if (updateError) throw updateError;
 
-      // Mark attendance as present using the REQUEST timestamp (not approval time)
+      // Calculate attendance type based on ORIGINAL request timestamp
+      const requestedAt = new Date(request.requested_at);
+      const sessionStart = new Date(`${request.session_date}T${request.session_start_time}+00:00`);
+      
+      const attendanceType = calculateAttendanceType(
+        requestedAt,
+        sessionStart,
+        request.late_threshold_minutes,
+        request.partial_threshold_minutes
+      );
+
+      // Mark attendance as PRESENT with the correct attendance_type
+      // Use the original request timestamp as join_time
       const { error: attendanceError } = await supabase
         .from('attendance')
         .upsert({
           session_id: request.session_id,
           user_id: request.user_id,
-          status: 'present',
+          status: 'present', // Always present when approved
+          attendance_type: attendanceType, // on_time, late, or partial
           join_time: request.requested_at, // Use the original request timestamp
         }, {
           onConflict: 'session_id,user_id',
         });
 
       if (attendanceError) {
+        console.error('Upsert error, trying insert:', attendanceError);
         // If upsert fails, try insert
         await supabase
           .from('attendance')
@@ -171,15 +213,20 @@ export function TrainerJoinRequests() {
             session_id: request.session_id,
             user_id: request.user_id,
             status: 'present',
-            join_time: request.requested_at, // Use the original request timestamp
+            attendance_type: attendanceType,
+            join_time: request.requested_at,
           });
       }
 
-      toast.success(`Approved attendance for ${request.trainee_name || 'trainee'}`);
+      // Show appropriate message based on attendance type
+      const typeLabel = attendanceType === 'on_time' ? 'ON TIME' : 
+                        attendanceType === 'late' ? 'LATE' : 'PARTIAL';
+      
+      toast.success(`Approved! ${request.trainee_name || 'Trainee'} marked as ${typeLabel}`);
       fetchPendingRequests();
     } catch (error) {
       console.error('Error approving request:', error);
-      toast.error('Failed to approve request');
+      toast.error('Failed to approve attendance');
     } finally {
       setProcessing(null);
     }
@@ -199,7 +246,7 @@ export function TrainerJoinRequests() {
 
       if (error) throw error;
 
-      toast.success(`Rejected join request`);
+      toast.success(`Rejected attendance request`);
       fetchPendingRequests();
     } catch (error) {
       console.error('Error rejecting request:', error);
@@ -225,6 +272,29 @@ export function TrainerJoinRequests() {
     });
   };
 
+  // Calculate what the attendance type would be if approved now
+  const getExpectedType = (request: JoinRequest): 'on_time' | 'late' | 'partial' => {
+    const requestedAt = new Date(request.requested_at);
+    const sessionStart = new Date(`${request.session_date}T${request.session_start_time}+00:00`);
+    return calculateAttendanceType(
+      requestedAt,
+      sessionStart,
+      request.late_threshold_minutes,
+      request.partial_threshold_minutes
+    );
+  };
+
+  const getTypeBadge = (type: 'on_time' | 'late' | 'partial') => {
+    switch (type) {
+      case 'on_time':
+        return <Badge className="bg-green-500 text-white">On Time</Badge>;
+      case 'late':
+        return <Badge className="bg-amber-500 text-white">Late</Badge>;
+      case 'partial':
+        return <Badge className="bg-orange-500 text-white">Partial</Badge>;
+    }
+  };
+
   if (loading) {
     return (
       <Card className="p-6">
@@ -240,7 +310,7 @@ export function TrainerJoinRequests() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Bell className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Join Requests</h2>
+          <h2 className="text-lg font-semibold text-foreground">Attendance Requests</h2>
         </div>
         {requests.length > 0 && (
           <Badge variant="secondary">{requests.length} pending</Badge>
@@ -250,69 +320,80 @@ export function TrainerJoinRequests() {
       {requests.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No pending join requests</p>
+          <p>No pending attendance requests</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((request) => (
-            <div
-              key={request.id}
-              className="p-4 border rounded-lg bg-card"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-medium text-foreground">
-                    {request.trainee_name || 'Unknown Trainee'}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {request.trainee_email}
-                  </p>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    <span className="font-medium">{request.session_title}</span>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {formatDate(request.session_date)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {request.session_time}
-                      </span>
+          {requests.map((request) => {
+            const expectedType = getExpectedType(request);
+            return (
+              <div
+                key={request.id}
+                className="p-4 border rounded-lg bg-card"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-medium text-foreground">
+                        {request.trainee_name || 'Unknown Trainee'}
+                      </h3>
+                      {getTypeBadge(expectedType)}
                     </div>
+                    <p className="text-sm text-muted-foreground">
+                      {request.trainee_email}
+                    </p>
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      <span className="font-medium">{request.session_title}</span>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(request.session_date)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {request.session_time}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Requested at {formatTime(request.requested_at)}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Requested at {formatTime(request.requested_at)}
-                  </p>
-                </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleReject(request)}
-                    disabled={processing === request.id}
-                  >
-                    {processing === request.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <X className="w-4 h-4" />
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleApprove(request)}
-                    disabled={processing === request.id}
-                  >
-                    {processing === request.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Check className="w-4 h-4" />
-                    )}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleReject(request)}
+                      disabled={processing === request.id}
+                      className="text-destructive hover:bg-destructive/10"
+                    >
+                      {processing === request.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <X className="w-4 h-4" />
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(request)}
+                      disabled={processing === request.id}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {processing === request.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 mr-1" />
+                          Approve
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>

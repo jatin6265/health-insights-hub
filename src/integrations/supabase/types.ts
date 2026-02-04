@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       attendance: {
         Row: {
+          attendance_type: Database["public"]["Enums"]["attendance_type"] | null
           created_at: string
           duration_minutes: number | null
           id: string
@@ -30,6 +31,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          attendance_type?:
+            | Database["public"]["Enums"]["attendance_type"]
+            | null
           created_at?: string
           duration_minutes?: number | null
           id?: string
@@ -44,6 +48,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          attendance_type?:
+            | Database["public"]["Enums"]["attendance_type"]
+            | null
           created_at?: string
           duration_minutes?: number | null
           id?: string
@@ -264,6 +271,7 @@ export type Database = {
           id: string
           late_threshold_minutes: number | null
           location: string | null
+          partial_threshold_minutes: number | null
           qr_expires_at: string | null
           qr_token: string | null
           scheduled_date: string
@@ -283,6 +291,7 @@ export type Database = {
           id?: string
           late_threshold_minutes?: number | null
           location?: string | null
+          partial_threshold_minutes?: number | null
           qr_expires_at?: string | null
           qr_token?: string | null
           scheduled_date: string
@@ -302,6 +311,7 @@ export type Database = {
           id?: string
           late_threshold_minutes?: number | null
           location?: string | null
+          partial_threshold_minutes?: number | null
           qr_expires_at?: string | null
           qr_token?: string | null
           scheduled_date?: string
@@ -463,6 +473,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "trainer" | "trainee"
       attendance_status: "present" | "late" | "partial" | "absent"
+      attendance_type: "on_time" | "late" | "partial"
       session_status: "scheduled" | "active" | "completed" | "cancelled"
       user_status: "pending" | "active" | "inactive" | "rejected"
     }
@@ -594,6 +605,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "trainer", "trainee"],
       attendance_status: ["present", "late", "partial", "absent"],
+      attendance_type: ["on_time", "late", "partial"],
       session_status: ["scheduled", "active", "completed", "cancelled"],
       user_status: ["pending", "active", "inactive", "rejected"],
     },

@@ -81,6 +81,7 @@ export function NotificationInbox() {
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_read', false) // Only fetch unread notifications
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -93,40 +94,41 @@ export function NotificationInbox() {
     }
   };
 
-  const markAsRead = async (notificationId: string) => {
+  const markAsReadAndDelete = async (notificationId: string) => {
     try {
+      // Delete the notification from the database
       const { error } = await supabase
         .from('notifications')
-        .update({ is_read: true })
+        .delete()
         .eq('id', notificationId);
 
       if (error) throw error;
 
-      setNotifications(prev =>
-        prev.map(n => (n.id === notificationId ? { ...n, is_read: true } : n))
-      );
+      // Remove from local state
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Error deleting notification:', error);
     }
   };
 
-  const markAllAsRead = async () => {
+  const markAllAsReadAndDelete = async () => {
     if (!user) return;
 
     try {
+      // Delete all unread notifications for this user
       const { error } = await supabase
         .from('notifications')
-        .update({ is_read: true })
+        .delete()
         .eq('user_id', user.id)
         .eq('is_read', false);
 
       if (error) throw error;
 
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      toast.success('All notifications marked as read');
+      setNotifications([]);
+      toast.success('All notifications cleared');
     } catch (error) {
-      console.error('Error marking all as read:', error);
-      toast.error('Failed to mark notifications as read');
+      console.error('Error clearing notifications:', error);
+      toast.error('Failed to clear notifications');
     }
   };
 
@@ -143,7 +145,7 @@ export function NotificationInbox() {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const unreadCount = notifications.length;
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -175,9 +177,9 @@ export function NotificationInbox() {
               )}
             </SheetTitle>
             {unreadCount > 0 && (
-              <Button size="sm" variant="ghost" onClick={markAllAsRead}>
-                <CheckCheck className="w-4 h-4 mr-1" />
-                Mark all read
+              <Button size="sm" variant="ghost" onClick={markAllAsReadAndDelete}>
+                <Trash2 className="w-4 h-4 mr-1" />
+                Clear All
               </Button>
             )}
           </div>
@@ -191,42 +193,26 @@ export function NotificationInbox() {
           ) : notifications.length === 0 ? (
             <div className="text-center py-12">
               <Mail className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground">No notifications yet</p>
+              <p className="text-muted-foreground">No notifications</p>
             </div>
           ) : (
             <div className="space-y-2">
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={cn(
-                    "p-4 rounded-lg border cursor-pointer transition-colors",
-                    notification.is_read 
-                      ? "bg-background hover:bg-muted/50" 
-                      : "bg-primary/5 border-primary/20 hover:bg-primary/10"
-                  )}
-                  onClick={() => !notification.is_read && markAsRead(notification.id)}
+                  className="p-4 rounded-lg border bg-primary/5 border-primary/20 hover:bg-primary/10 cursor-pointer transition-colors"
+                  onClick={() => markAsReadAndDelete(notification.id)}
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5">
-                      {notification.is_read ? (
-                        <MailOpen className="w-4 h-4 text-muted-foreground" />
-                      ) : (
-                        getTypeIcon(notification.type)
-                      )}
+                      {getTypeIcon(notification.type)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className={cn(
-                          "text-sm truncate",
-                          notification.is_read 
-                            ? "text-muted-foreground" 
-                            : "text-foreground font-medium"
-                        )}>
+                        <p className="text-sm text-foreground font-medium truncate">
                           {notification.title}
                         </p>
-                        {!notification.is_read && (
-                          <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                        )}
+                        <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                       </div>
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                         {notification.message}
@@ -235,6 +221,17 @@ export function NotificationInbox() {
                         {format(new Date(notification.created_at), 'MMM d, yyyy • h:mm a')}
                       </p>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAsReadAndDelete(notification.id);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
                   </div>
                 </div>
               ))}

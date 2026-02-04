@@ -302,7 +302,7 @@ const handleRefreshQR = async (sessionId: string) => {
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="requests" className="flex items-center gap-2">
           <Users className="w-4 h-4" />
-          Join Requests
+          Attendance Requests
         </TabsTrigger>
         <TabsTrigger value="participants" className="flex items-center gap-2">
           <UserPlus className="w-4 h-4" />

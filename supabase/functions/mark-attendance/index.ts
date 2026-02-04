@@ -17,6 +17,30 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+/**
+ * Calculate attendance type based on timing
+ * - on_time: within late_threshold_minutes of session start
+ * - late: between late_threshold and partial_threshold
+ * - partial: after partial_threshold
+ */
+function calculateAttendanceType(
+  joinTime: Date,
+  sessionStart: Date,
+  lateThresholdMinutes: number,
+  partialThresholdMinutes: number
+): "on_time" | "late" | "partial" {
+  const delayMs = joinTime.getTime() - sessionStart.getTime();
+  const delayMinutes = delayMs / 60000;
+
+  if (delayMinutes <= lateThresholdMinutes) {
+    return "on_time";
+  } else if (delayMinutes <= partialThresholdMinutes) {
+    return "late";
+  } else {
+    return "partial";
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -110,7 +134,7 @@ Deno.serve(async (req) => {
     const { data: session } = await supabaseAdmin
       .from("sessions")
       .select(
-        "id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, late_threshold_minutes"
+        "id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, late_threshold_minutes, partial_threshold_minutes"
       )
       .eq("id", sessionId)
       .maybeSingle();
@@ -139,7 +163,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    /* ---------- QR expiry FIRST ---------- */
+    /* ---------- QR expiry check ---------- */
     if (
       session.qr_expires_at &&
       new Date(session.qr_expires_at).getTime() <= Date.now()
@@ -191,37 +215,47 @@ Deno.serve(async (req) => {
     /* ---------- Attendance check ---------- */
     const { data: existing } = await supabaseAdmin
       .from("attendance")
-      .select("id, status")
+      .select("id, status, attendance_type")
       .eq("session_id", sessionId)
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (existing && existing.status !== "absent") {
+    // If already marked as present with attendance_type, return success
+    if (existing && existing.status === "present" && existing.attendance_type) {
       return jsonResponse(
         {
           success: true,
-          message: `Attendance already marked as ${existing.status}.`,
+          message: `Attendance already marked as ${existing.attendance_type}.`,
           status: existing.status,
+          attendanceType: existing.attendance_type,
           debugId,
         },
         200
       );
     }
 
-    /* ---------- Late logic ---------- */
+    /* ---------- Calculate attendance type based on timing ---------- */
     const now = new Date();
     const sessionStart = new Date(
       `${session.scheduled_date}T${session.start_time}+00:00`
     );
 
     const lateThreshold = session.late_threshold_minutes ?? 15;
-    const lateTime = new Date(sessionStart.getTime() + lateThreshold * 60000);
-    const status = now > lateTime ? "late" : "present";
+    const partialThreshold = session.partial_threshold_minutes ?? 30;
+
+    // Calculate attendance type based on timing
+    const attendanceType = calculateAttendanceType(
+      now,
+      sessionStart,
+      lateThreshold,
+      partialThreshold
+    );
 
     const attendancePayload = {
       session_id: sessionId,
       user_id: user.id,
-      status,
+      status: "present" as const, // QR scan always marks as PRESENT
+      attendance_type: attendanceType, // Classification: on_time, late, or partial
       join_time: now.toISOString(),
       qr_token_used: token,
       ip_address: req.headers.get("x-forwarded-for") ?? "unknown",
@@ -239,14 +273,24 @@ Deno.serve(async (req) => {
         .insert(attendancePayload);
     }
 
+    // Generate user-friendly message
+    let message = "Attendance marked successfully.";
+    if (attendanceType === "late") {
+      message = "Attendance marked as LATE.";
+    } else if (attendanceType === "partial") {
+      message = "Attendance marked as PARTIAL.";
+    } else {
+      message = "Attendance marked as ON TIME.";
+    }
+
+    console.log(`[${debugId}] Attendance marked: ${attendanceType} for user ${user.id}`);
+
     return jsonResponse(
       {
         success: true,
-        message:
-          status === "late"
-            ? "Attendance marked as LATE."
-            : "Attendance marked successfully.",
-        status,
+        message,
+        status: "present",
+        attendanceType,
         debugId,
       },
       200

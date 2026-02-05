@@ -287,11 +287,11 @@ export function TrainerJoinRequests() {
   const getTypeBadge = (type: 'on_time' | 'late' | 'partial') => {
     switch (type) {
       case 'on_time':
-        return <Badge className="bg-green-500 text-white">On Time</Badge>;
+        return <Badge className="bg-primary text-primary-foreground">On Time</Badge>;
       case 'late':
-        return <Badge className="bg-amber-500 text-white">Late</Badge>;
+        return <Badge variant="secondary">Late</Badge>;
       case 'partial':
-        return <Badge className="bg-orange-500 text-white">Partial</Badge>;
+        return <Badge variant="outline">Partial</Badge>;
     }
   };
 
@@ -378,14 +378,14 @@ export function TrainerJoinRequests() {
                       size="sm"
                       onClick={() => handleApprove(request)}
                       disabled={processing === request.id}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {processing === request.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
                           <Check className="w-4 h-4 mr-1" />
-                          Approve
+                          Approve Attendance
                         </>
                       )}
                     </Button>

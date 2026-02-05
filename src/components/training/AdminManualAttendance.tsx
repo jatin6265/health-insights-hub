@@ -166,7 +166,7 @@ export function AdminManualAttendance() {
       // Fetch attendance records
       const { data: attendanceData, error: attError } = await supabase
         .from('attendance')
-        .select('id, user_id, status, join_time')
+        .select('id, user_id, status, join_time, attendance_type')
         .eq('session_id', selectedSession);
 
       if (attError) throw attError;
@@ -176,13 +176,22 @@ export function AdminManualAttendance() {
 
       const mapped: ParticipantAttendance[] = userIds.map(userId => {
         const profile = profilesMap.get(userId);
-        const attendance = attendanceMap.get(userId);
+        const attendance = attendanceMap.get(userId) as any;
+        const rawStatus = attendance?.status as AttendanceStatus | undefined;
+        const type = attendance?.attendance_type as 'on_time' | 'late' | 'partial' | null | undefined;
+
+        const derivedStatus: AttendanceStatus | null = !rawStatus
+          ? null
+          : rawStatus === 'present'
+            ? (type === 'late' ? 'late' : type === 'partial' ? 'partial' : 'present')
+            : rawStatus;
+
         return {
           user_id: userId,
           full_name: profile?.full_name || 'Unknown',
           email: profile?.email || '',
           attendance_id: attendance?.id || null,
-          attendance_status: (attendance?.status as AttendanceStatus) || null,
+          attendance_status: derivedStatus,
           join_time: attendance?.join_time || null,
         };
       });
@@ -203,32 +212,15 @@ export function AdminManualAttendance() {
 
     setSaving(true);
     try {
-      const now = new Date().toISOString();
+      const { data, error } = await supabase.functions.invoke('set-attendance', {
+        body: {
+          sessionId: selectedSession,
+          userId: editingParticipant.user_id,
+          status: newStatus,
+        },
+      });
 
-      if (editingParticipant.attendance_id) {
-        // Update existing attendance
-        const { error } = await supabase
-          .from('attendance')
-          .update({
-            status: newStatus,
-            updated_at: now,
-          })
-          .eq('id', editingParticipant.attendance_id);
-
-        if (error) throw error;
-      } else {
-        // Create new attendance record
-        const { error } = await supabase
-          .from('attendance')
-          .insert({
-            session_id: selectedSession,
-            user_id: editingParticipant.user_id,
-            status: newStatus,
-            join_time: newStatus !== 'absent' ? now : null,
-          });
-
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       toast.success(`Attendance marked as ${newStatus} for ${editingParticipant.full_name}`);
       setEditingParticipant(null);

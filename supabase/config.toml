@@ -17,3 +17,10 @@ verify_jwt = false
 
 [functions.auto-complete-sessions]
 verify_jwt = false
+
+[functions.process-attendance-request]
+verify_jwt = false
+
+[functions.set-attendance]
+verify_jwt = false
+

@@ -84,7 +84,8 @@ export function QRCodeDisplay({
       : '';
 
   const presentCount = attendanceList.filter(a => a.status === 'present').length;
-  const lateCount = attendanceList.filter(a => a.status === 'late').length;
+  const lateCount = attendanceList.filter(a => a.attendance_type === 'late').length;
+  const partialCount = attendanceList.filter(a => a.attendance_type === 'partial').length;
 
   /* -------------------- Refresh handler -------------------- */
   const handleRefresh = async () => {
@@ -177,6 +178,7 @@ export function QRCodeDisplay({
               <div className="flex gap-2">
                 <Badge className="bg-green-500">{presentCount} Present</Badge>
                 <Badge className="bg-amber-500">{lateCount} Late</Badge>
+                <Badge variant="secondary">{partialCount} Partial</Badge>
               </div>
             </div>
 
@@ -192,39 +194,52 @@ export function QRCodeDisplay({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {attendanceList.map(record => (
-                    <div
-                      key={record.id}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2">
-                        {record.status === 'present' ? (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-amber-500" />
-                        )}
-                        <span className="text-sm font-medium">
-                          {record.user_name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          className={
-                            record.status === 'present'
-                              ? 'bg-green-500'
-                              : 'bg-amber-500'
-                          }
-                        >
-                          {record.status}
-                        </Badge>
-                        {record.join_time && (
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(record.join_time), 'HH:mm')}
+                  {attendanceList.map(record => {
+                    const displayStatus =
+                      record.status === 'present'
+                        ? record.attendance_type === 'late'
+                          ? 'late'
+                          : record.attendance_type === 'partial'
+                            ? 'partial'
+                            : 'present'
+                        : record.status;
+
+                    return (
+                      <div
+                        key={record.id}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2">
+                          {displayStatus === 'present' ? (
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-amber-500" />
+                          )}
+                          <span className="text-sm font-medium">
+                            {record.user_name}
                           </span>
-                        )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={
+                              displayStatus === 'present'
+                                ? 'bg-green-500'
+                                : displayStatus === 'late'
+                                  ? 'bg-amber-500'
+                                  : 'bg-secondary'
+                            }
+                          >
+                            {displayStatus}
+                          </Badge>
+                          {record.join_time && (
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(record.join_time), 'HH:mm')}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>

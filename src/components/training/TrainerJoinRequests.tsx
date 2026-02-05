@@ -167,61 +167,26 @@ export function TrainerJoinRequests() {
   const handleApprove = async (request: JoinRequest) => {
     setProcessing(request.id);
     try {
-      // Update join request status
-      const { error: updateError } = await supabase
-        .from('join_requests')
-        .update({
-          status: 'approved',
-          processed_at: new Date().toISOString(),
-          processed_by: user?.id,
-        })
-        .eq('id', request.id);
+      const { data, error } = await supabase.functions.invoke('process-attendance-request', {
+        body: { requestId: request.id, action: 'approve' },
+      });
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
-      // Calculate attendance type based on ORIGINAL request timestamp
-      const requestedAt = new Date(request.requested_at);
-      const sessionStart = new Date(`${request.session_date}T${request.session_start_time}+00:00`);
-      
-      const attendanceType = calculateAttendanceType(
-        requestedAt,
-        sessionStart,
-        request.late_threshold_minutes,
-        request.partial_threshold_minutes
-      );
+      const attendanceType = (data as any)?.attendanceType as
+        | 'on_time'
+        | 'late'
+        | 'partial'
+        | undefined;
 
-      // Mark attendance as PRESENT with the correct attendance_type
-      // Use the original request timestamp as join_time
-      const { error: attendanceError } = await supabase
-        .from('attendance')
-        .upsert({
-          session_id: request.session_id,
-          user_id: request.user_id,
-          status: 'present', // Always present when approved
-          attendance_type: attendanceType, // on_time, late, or partial
-          join_time: request.requested_at, // Use the original request timestamp
-        }, {
-          onConflict: 'session_id,user_id',
-        });
+      const typeLabel = attendanceType === 'on_time'
+        ? 'ON TIME'
+        : attendanceType === 'late'
+          ? 'LATE'
+          : attendanceType === 'partial'
+            ? 'PARTIAL'
+            : 'PRESENT';
 
-      if (attendanceError) {
-        console.error('Upsert error, trying insert:', attendanceError);
-        // If upsert fails, try insert
-        await supabase
-          .from('attendance')
-          .insert({
-            session_id: request.session_id,
-            user_id: request.user_id,
-            status: 'present',
-            attendance_type: attendanceType,
-            join_time: request.requested_at,
-          });
-      }
-
-      // Show appropriate message based on attendance type
-      const typeLabel = attendanceType === 'on_time' ? 'ON TIME' : 
-                        attendanceType === 'late' ? 'LATE' : 'PARTIAL';
-      
       toast.success(`Approved! ${request.trainee_name || 'Trainee'} marked as ${typeLabel}`);
       fetchPendingRequests();
     } catch (error) {
@@ -235,14 +200,9 @@ export function TrainerJoinRequests() {
   const handleReject = async (request: JoinRequest) => {
     setProcessing(request.id);
     try {
-      const { error } = await supabase
-        .from('join_requests')
-        .update({
-          status: 'rejected',
-          processed_at: new Date().toISOString(),
-          processed_by: user?.id,
-        })
-        .eq('id', request.id);
+      const { error } = await supabase.functions.invoke('process-attendance-request', {
+        body: { requestId: request.id, action: 'reject' },
+      });
 
       if (error) throw error;
 

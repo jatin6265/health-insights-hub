@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     const { data: session } = await supabaseAdmin
       .from("sessions")
       .select(
-        "id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, late_threshold_minutes, partial_threshold_minutes"
+        "id, title, status, qr_token, qr_expires_at, scheduled_date, start_time, actual_start_time, late_threshold_minutes, partial_threshold_minutes"
       )
       .eq("id", sessionId)
       .maybeSingle();
@@ -236,9 +236,10 @@ Deno.serve(async (req) => {
 
     /* ---------- Calculate attendance type based on timing ---------- */
     const now = new Date();
-    const sessionStart = new Date(
-      `${session.scheduled_date}T${session.start_time}+00:00`
-    );
+    // Prefer actual_start_time (timestamp with tz) to avoid timezone ambiguity.
+    const sessionStart = session.actual_start_time
+      ? new Date(session.actual_start_time)
+      : new Date(`${session.scheduled_date}T${session.start_time}Z`);
 
     const lateThreshold = session.late_threshold_minutes ?? 15;
     const partialThreshold = session.partial_threshold_minutes ?? 30;
@@ -272,6 +273,19 @@ Deno.serve(async (req) => {
         .from("attendance")
         .insert(attendancePayload);
     }
+
+    // If the trainee previously created a pending trainer-approval request,
+    // auto-close it to keep QR + request flows unified.
+    await supabaseAdmin
+      .from("join_requests")
+      .update({
+        status: "approved",
+        processed_at: now.toISOString(),
+        processed_by: null,
+      })
+      .eq("session_id", sessionId)
+      .eq("user_id", user.id)
+      .eq("status", "pending");
 
     // Generate user-friendly message
     let message = "Attendance marked successfully.";

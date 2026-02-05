@@ -182,7 +182,7 @@ export function SessionAttendanceDetails() {
       // Fetch attendance records
       const { data: attendanceData, error: attError } = await supabase
         .from('attendance')
-        .select('user_id, status, join_time')
+        .select('user_id, status, attendance_type, join_time')
         .eq('session_id', selectedSession);
 
       if (attError) throw attError;
@@ -192,12 +192,21 @@ export function SessionAttendanceDetails() {
 
       const mapped: ParticipantAttendance[] = userIds.map(userId => {
         const profile = profilesMap.get(userId);
-        const attendance = attendanceMap.get(userId);
+        const attendance = attendanceMap.get(userId) as any;
+        const rawStatus = attendance?.status as AttendanceStatus | undefined;
+        const type = attendance?.attendance_type as 'on_time' | 'late' | 'partial' | null | undefined;
+
+        const derivedStatus: AttendanceStatus | null = !rawStatus
+          ? null
+          : rawStatus === 'present'
+            ? (type === 'late' ? 'late' : type === 'partial' ? 'partial' : 'present')
+            : rawStatus;
+
         return {
           user_id: userId,
           full_name: profile?.full_name || 'Unknown',
           email: profile?.email || '',
-          attendance_status: (attendance?.status as AttendanceStatus) || null,
+          attendance_status: derivedStatus,
           join_time: attendance?.join_time || null,
         };
       });

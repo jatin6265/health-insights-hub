@@ -14,6 +14,7 @@ import {
   Loader2,
   QrCode,
   Zap,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -205,7 +206,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
 
       if (error) throw error;
 
-      toast.success('Join request sent to trainer');
+      toast.success('Attendance request sent to trainer for approval');
       fetchAssignedSessions();
     } catch (error: any) {
       console.error('Error sending request:', error);
@@ -229,23 +230,23 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
 
   const getSessionCardStyle = (session: AssignedSession) => {
     if (session.status === 'active') {
-      return 'border-green-500/50 bg-green-500/5';
+      return 'border-primary/50 bg-primary/5';
     }
-    return 'border-amber-500/30 bg-amber-500/5';
+    return 'border-secondary/30 bg-secondary/5';
   };
 
   const getStatusBadge = (session: AssignedSession) => {
     // Session status badge
     if (session.status === 'active') {
       return (
-        <Badge className="bg-green-500 animate-pulse">
+        <Badge className="bg-primary animate-pulse">
           <Zap className="w-3 h-3 mr-1" />
           Live Now
         </Badge>
       );
     }
     return (
-      <Badge className="bg-amber-500/80 text-amber-950">
+      <Badge variant="secondary">
         <Clock className="w-3 h-3 mr-1" />
         Upcoming
       </Badge>
@@ -256,7 +257,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
     // If already has attendance marked
     if (session.attendance_status && session.attendance_status !== 'absent') {
       return (
-        <Badge className="bg-green-500">
+        <Badge className="bg-primary">
           <CheckCircle className="w-3 h-3 mr-1" />
           {session.attendance_status === 'present' ? 'Present' : 'Late'}
         </Badge>
@@ -267,14 +268,14 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
     switch (session.join_request_status) {
       case 'pending':
         return (
-          <Badge variant="outline" className="border-amber-500 text-amber-600">
+          <Badge variant="outline" className="border-secondary text-secondary-foreground">
             <Clock className="w-3 h-3 mr-1" />
             Pending Approval
           </Badge>
         );
       case 'approved':
         return (
-          <Badge className="bg-green-500">
+          <Badge className="bg-primary">
             <CheckCircle className="w-3 h-3 mr-1" />
             Approved
           </Badge>
@@ -308,9 +309,9 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
     <div className="space-y-6">
       {/* Active Sessions - Can mark attendance */}
       {activeSessions.length > 0 && (
-        <Card className="p-6 border-green-500/50 bg-green-500/5">
+        <Card className="p-6 border-primary/50 bg-primary/5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+            <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
             <h2 className="text-lg font-semibold text-foreground">Active Sessions - Mark Attendance</h2>
           </div>
           <div className="space-y-4">
@@ -355,40 +356,43 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
 
                 {/* Action buttons - Only for active sessions without attendance */}
                 {(!session.attendance_status || session.attendance_status === 'absent') && (
-                  <div className="flex gap-2 flex-wrap">
-                    {/* QR Scan button */}
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground font-medium">Choose attendance method:</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {/* Option 1: QR Scan Attendance */}
                     {onScanQR && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => onScanQR(session.id)}
-                        className="border-green-500/50 hover:bg-green-500/10"
+                          className="border-primary/50 hover:bg-primary/10"
                       >
                         <QrCode className="w-4 h-4 mr-2" />
-                        Scan QR
+                          Scan QR Code
                       </Button>
                     )}
 
-                    {/* Mark Attendance button - Only for active sessions */}
+                      {/* Option 2: Mark Attendance (Trainer Approval) */}
                     {session.join_request_status === 'none' && (
                       <Button
                         size="sm"
                         onClick={() => handleRequestJoin(session.id)}
                         disabled={requesting === session.id}
+                          variant="secondary"
                       >
                         {requesting === session.id ? (
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         ) : (
-                          <Send className="w-4 h-4 mr-2" />
+                            <UserCheck className="w-4 h-4 mr-2" />
                         )}
-                        Mark Attendance
+                          Mark Attendance (Trainer Approval)
                       </Button>
                     )}
 
                     {session.join_request_status === 'pending' && (
-                      <Button size="sm" variant="outline" disabled>
-                        <Clock className="w-4 h-4 mr-2" />
-                        Awaiting Approval
+                        <Button size="sm" variant="outline" disabled className="border-secondary/50">
+                          <Clock className="w-4 h-4 mr-2 text-secondary" />
+                          Pending Trainer Approval
                       </Button>
                     )}
 
@@ -398,15 +402,28 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
                         variant="outline"
                         onClick={() => handleRequestJoin(session.id)}
                         disabled={requesting === session.id}
+                          className="border-destructive/50"
                       >
+                          <XCircle className="w-4 h-4 mr-2 text-destructive" />
                         Request Again
                       </Button>
                     )}
+                    </div>
+                    
+                    {/* Explanation text */}
+                    <p className="text-xs text-muted-foreground">
+                      {session.join_request_status === 'none' && 
+                        "QR scan marks attendance instantly. Trainer approval requires trainer confirmation."}
+                      {session.join_request_status === 'pending' && 
+                        "Your request has been sent. Waiting for trainer to approve."}
+                      {session.join_request_status === 'rejected' && 
+                        "Your previous request was rejected. You can request again or scan QR."}
+                    </p>
                   </div>
                 )}
 
                 {session.attendance_status && session.attendance_status !== 'absent' && (
-                  <p className="text-sm text-green-600 font-medium">
+                  <p className="text-sm text-primary font-medium">
                     ✓ Attendance marked as {session.attendance_status}
                   </p>
                 )}
@@ -419,7 +436,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
       {/* Upcoming Sessions - View only, no actions */}
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-amber-500" />
+          <Clock className="w-5 h-5 text-secondary" />
           <h2 className="text-lg font-semibold text-foreground">Upcoming Sessions</h2>
           {upcomingSessions.length > 0 && (
             <Badge variant="secondary" className="ml-2">{upcomingSessions.length}</Badge>
@@ -470,7 +487,7 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
                   </p>
                 )}
 
-                <p className="text-xs text-amber-600 mt-3">
+                <p className="text-xs text-secondary mt-3">
                   ⏳ You can mark attendance or request to join once the session starts
                 </p>
               </div>

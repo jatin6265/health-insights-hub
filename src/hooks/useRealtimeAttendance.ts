@@ -7,6 +7,7 @@ interface AttendanceUpdate {
   session_id: string;
   user_id: string;
   status: string;
+  attendance_type?: 'on_time' | 'late' | 'partial' | null;
   join_time: string | null;
   user_name?: string;
 }
@@ -26,7 +27,7 @@ export function useRealtimeAttendance({ sessionId, enabled = true }: UseRealtime
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .select('id, session_id, user_id, status, join_time')
+        .select('id, session_id, user_id, status, attendance_type, join_time')
         .eq('session_id', sessionId);
 
       if (error) throw error;
@@ -103,7 +104,8 @@ export function useRealtimeAttendance({ sessionId, enabled = true }: UseRealtime
 
             // Show toast for new attendance
             if (payload.eventType === 'INSERT') {
-              toast.success(`${profile?.full_name || 'A participant'} marked attendance (${record.status})`);
+              const label = record.attendance_type || record.status;
+              toast.success(`${profile?.full_name || 'A participant'} marked attendance (${label})`);
             }
           }
         }

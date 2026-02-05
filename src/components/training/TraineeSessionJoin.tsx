@@ -157,25 +157,37 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
       // Get attendance statuses
       const { data: attendances } = await supabase
         .from('attendance')
-        .select('session_id, status')
+        .select('session_id, status, attendance_type')
         .eq('user_id', user.id)
         .in('session_id', sessionIds);
-      const attendanceMap = new Map(attendances?.map(a => [a.session_id, a.status]) || []);
+      const attendanceMap = new Map(attendances?.map(a => [a.session_id, a]) || []);
 
-      const mapped: AssignedSession[] = upcomingSessions.map(s => ({
-        id: s.id,
-        title: s.title,
-        description: s.description,
-        scheduled_date: s.scheduled_date,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        location: s.location,
-        status: s.status,
-        training_title: s.trainings?.title || 'Training',
-        trainer_name: s.trainer_id ? trainerMap.get(s.trainer_id) || null : null,
-        join_request_status: (requestMap.get(s.id) as any) || 'none',
-        attendance_status: attendanceMap.get(s.id) || null,
-      }));
+      const mapped: AssignedSession[] = upcomingSessions.map(s => {
+        const attendanceRow = attendanceMap.get(s.id) as any;
+        const rawStatus = attendanceRow?.status as string | undefined;
+        const type = attendanceRow?.attendance_type as 'on_time' | 'late' | 'partial' | null | undefined;
+
+        const derivedAttendanceStatus = !rawStatus
+          ? null
+          : rawStatus === 'present'
+            ? (type === 'late' ? 'late' : type === 'partial' ? 'partial' : 'present')
+            : rawStatus;
+
+        return {
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          scheduled_date: s.scheduled_date,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          location: s.location,
+          status: s.status,
+          training_title: s.trainings?.title || 'Training',
+          trainer_name: s.trainer_id ? trainerMap.get(s.trainer_id) || null : null,
+          join_request_status: (requestMap.get(s.id) as any) || 'none',
+          attendance_status: derivedAttendanceStatus,
+        };
+      });
 
       // Sort by status (active first) then by date
       mapped.sort((a, b) => {
@@ -256,10 +268,16 @@ export function TraineeSessionJoin({ onScanQR, onRefreshData }: TraineeSessionJo
   const getAttendanceBadge = (session: AssignedSession) => {
     // If already has attendance marked
     if (session.attendance_status && session.attendance_status !== 'absent') {
+      const label = session.attendance_status === 'present'
+        ? 'Present'
+        : session.attendance_status === 'late'
+          ? 'Late'
+          : 'Partial';
+
       return (
         <Badge className="bg-primary">
           <CheckCircle className="w-3 h-3 mr-1" />
-          {session.attendance_status === 'present' ? 'Present' : 'Late'}
+          {label}
         </Badge>
       );
     }

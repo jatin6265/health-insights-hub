@@ -73,6 +73,8 @@ export interface Attendance {
   leave_time: string | null;
   duration_minutes: number | null;
   status: AttendanceStatus;
+  // Timing classification (does NOT block attendance)
+  attendance_type?: 'on_time' | 'late' | 'partial' | null;
   qr_token_used: string | null;
   ip_address: string | null;
   user_agent: string | null;

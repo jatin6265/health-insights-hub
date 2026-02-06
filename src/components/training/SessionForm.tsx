@@ -38,7 +38,7 @@ const sessionSchema = z.object({
 type SessionFormData = z.infer<typeof sessionSchema>;
 
 interface SessionFormProps {
-  session?: Session | null;
+  session?: Partial<Session> | null;
   onSubmit: (data: SessionFormData) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;

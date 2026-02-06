@@ -266,6 +266,7 @@ export type Database = {
           actual_end_time: string | null
           actual_start_time: string | null
           created_at: string
+          created_by: string | null
           description: string | null
           end_time: string
           id: string
@@ -286,6 +287,7 @@ export type Database = {
           actual_end_time?: string | null
           actual_start_time?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           end_time: string
           id?: string
@@ -306,6 +308,7 @@ export type Database = {
           actual_end_time?: string | null
           actual_start_time?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           end_time?: string
           id?: string

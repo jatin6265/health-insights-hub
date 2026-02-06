@@ -62,8 +62,8 @@ export function SessionManagement() {
   const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingSession, setEditingSession] = useState<Session | null>(null);
-  const [deletingSession, setDeletingSession] = useState<Session | null>(null);
+  const [editingSession, setEditingSession] = useState<SessionWithDetails | null>(null);
+  const [deletingSession, setDeletingSession] = useState<SessionWithDetails | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
@@ -73,18 +73,15 @@ export function SessionManagement() {
 
   const fetchSessions = async () => {
     try {
-      let query = supabase
+      // RLS now handles filtering - trainers only see their own sessions
+      // (assigned via trainer_id OR created_by)
+      const query = supabase
         .from('sessions')
         .select(`
           *,
           trainings (title)
         `)
         .order('scheduled_date', { ascending: false });
-
-      // Trainers only see their assigned sessions
-      if (isTrainer && !isAdmin && user) {
-        query = query.eq('trainer_id', user.id);
-      }
 
       const { data, error } = await query;
 
@@ -146,6 +143,7 @@ export function SessionManagement() {
         trainer_id: data.trainer_id || null,
         late_threshold_minutes: data.late_threshold_minutes,
         status: 'scheduled',
+        created_by: user?.id, // Track who created the session
       }).select('id, trainer_id').single();
 
       if (error) throw error;
@@ -355,13 +353,22 @@ export function SessionManagement() {
     }
   };
 
-  // Check if session can be edited (only scheduled sessions, not active/completed/cancelled)
+  // Check if current user owns this session (created or assigned)
+  const isSessionOwner = (session: SessionWithDetails): boolean => {
+    if (!user) return false;
+    return session.trainer_id === user.id || session.created_by === user.id;
+  };
+
+  // Check if session can be edited (only scheduled sessions by owner/admin)
   const canEditSession = (session: SessionWithDetails): boolean => {
     // Once session has started or ended, no one can edit
     if (session.status === 'active' || session.status === 'completed' || session.status === 'cancelled') {
       return false;
     }
-    return true;
+    // Admins can edit any scheduled session
+    if (isAdmin) return true;
+    // Trainers can only edit their own sessions
+    return isTrainer && isSessionOwner(session);
   };
 
   // Check if session can be deleted
@@ -371,20 +378,37 @@ export function SessionManagement() {
       return true;
     }
     
-    // Trainers can only delete their own sessions that haven't ended
-    if (isTrainer && session.trainer_id === user?.id) {
-      // Can't delete if session is completed or cancelled
-      if (session.status === 'completed' || session.status === 'cancelled') {
-        return false;
-      }
-      // Can't delete if session is active (started)
-      if (session.status === 'active') {
+    // Trainers can only delete sessions they CREATED (not just assigned to)
+    if (isTrainer && session.created_by === user?.id) {
+      // Can only delete scheduled sessions
+      if (session.status !== 'scheduled') {
         return false;
       }
       return true;
     }
     
     return false;
+  };
+
+  // Check if user can cancel session
+  const canCancelSession = (session: SessionWithDetails): boolean => {
+    if (session.status === 'cancelled' || session.status === 'completed') return false;
+    if (isAdmin) return true;
+    return isTrainer && isSessionOwner(session);
+  };
+
+  // Check if user can complete session
+  const canCompleteSession = (session: SessionWithDetails): boolean => {
+    if (session.status !== 'active') return false;
+    if (isAdmin) return true;
+    return isTrainer && isSessionOwner(session);
+  };
+
+  // Check if user can send reminders
+  const canSendReminder = (session: SessionWithDetails): boolean => {
+    if (session.status === 'cancelled') return false;
+    if (isAdmin) return true;
+    return isTrainer && isSessionOwner(session);
   };
 
   if (loading) {
@@ -482,24 +506,26 @@ export function SessionManagement() {
                           Edit
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem 
-                        onClick={() => handleSendReminder(session.id)}
-                        disabled={sendingReminder === session.id || session.status === 'cancelled'}
-                      >
-                        {sendingReminder === session.id ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4 mr-2" />
-                        )}
-                        Send Reminder
-                      </DropdownMenuItem>
-                      {session.status === 'active' && (
+                      {canSendReminder(session) && (
+                        <DropdownMenuItem 
+                          onClick={() => handleSendReminder(session.id)}
+                          disabled={sendingReminder === session.id}
+                        >
+                          {sendingReminder === session.id ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4 mr-2" />
+                          )}
+                          Send Reminder
+                        </DropdownMenuItem>
+                      )}
+                      {canCompleteSession(session) && (
                         <DropdownMenuItem onClick={() => handleCompleteSession(session.id)}>
                           <CheckCircle className="w-4 h-4 mr-2" />
                           Complete Session
                         </DropdownMenuItem>
                       )}
-                      {session.status !== 'cancelled' && session.status !== 'completed' && (
+                      {canCancelSession(session) && (
                         <DropdownMenuItem 
                           className="text-amber-600"
                           onClick={() => handleCancelSession(session.id)}

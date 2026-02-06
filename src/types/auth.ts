@@ -47,6 +47,7 @@ export interface Session {
   end_time: string;
   location: string | null;
   trainer_id: string | null;
+  created_by: string | null;
   status: SessionStatus;
   qr_token: string | null;
   qr_expires_at: string | null;

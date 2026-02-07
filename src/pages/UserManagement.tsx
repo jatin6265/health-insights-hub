@@ -1,18 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Navigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { usePagination } from '@/hooks/usePagination';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import {
+  MobileCardList,
+  MobileCardItem,
+  MobileCardHeader,
+  MobileCardBody,
+  MobileCardRow,
+  MobileCardActions,
+} from '@/components/ui/mobile-card-list';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Search, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building, KeyRound, Trash2, Loader2, Tags } from 'lucide-react';
+import { ArrowLeft, UserCog, Shield, Users, UserCheck, UserX, Mail, Phone, Building, KeyRound, Trash2, Loader2, Tags, MoreVertical, Pencil } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from '@/components/ui/use-toast';
 import { AppRole, UserStatus, UserWithRole } from '@/types/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
@@ -20,8 +38,8 @@ import { CategoryAssignment } from '@/components/user/CategoryAssignment';
 
 export default function UserManagement() {
   const { user, loading, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const [users, setUsers] = useState<UserWithRole[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<UserWithRole[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -38,15 +56,38 @@ export default function UserManagement() {
   const [deletingUser, setDeletingUser] = useState(false);
   const [categoryUser, setCategoryUser] = useState<UserWithRole | null>(null);
 
+  // Filter users
+  const filteredUsers = useMemo(() => {
+    let filtered = [...users];
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.full_name?.toLowerCase().includes(term) ||
+        u.email?.toLowerCase().includes(term) ||
+        u.department?.toLowerCase().includes(term)
+      );
+    }
+
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(u => u.role === roleFilter);
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(u => u.status === statusFilter);
+    }
+
+    return filtered;
+  }, [users, searchTerm, roleFilter, statusFilter]);
+
+  // Pagination
+  const pagination = usePagination(filteredUsers, { initialPageSize: 10 });
+
   useEffect(() => {
     if (isAdmin) {
       fetchUsers();
     }
   }, [isAdmin]);
-
-  useEffect(() => {
-    filterUsers();
-  }, [users, searchTerm, roleFilter, statusFilter]);
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -79,29 +120,6 @@ export default function UserManagement() {
     setLoadingUsers(false);
   };
 
-  const filterUsers = () => {
-    let filtered = [...users];
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(u => 
-        u.full_name?.toLowerCase().includes(term) ||
-        u.email?.toLowerCase().includes(term) ||
-        u.department?.toLowerCase().includes(term)
-      );
-    }
-
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(u => u.role === roleFilter);
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(u => u.status === statusFilter);
-    }
-
-    setFilteredUsers(filtered);
-  };
-
   const handleEditUser = (u: UserWithRole) => {
     setSelectedUser(u);
     setNewRole(u.role || 'trainee');
@@ -120,7 +138,6 @@ export default function UserManagement() {
     if (!selectedUser) return;
     setUpdating(true);
 
-    // Update status
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
@@ -140,7 +157,6 @@ export default function UserManagement() {
       return;
     }
 
-    // Update role
     const { data: existingRole } = await supabase
       .from('user_roles')
       .select('id')
@@ -333,6 +349,41 @@ export default function UserManagement() {
     return <Navigate to="/" replace />;
   }
 
+  const renderUserActions = (u: UserWithRole) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleEditUser(u)}>
+          <Pencil className="w-4 h-4 mr-2" />
+          Edit
+        </DropdownMenuItem>
+        {u.role === 'trainee' && (
+          <DropdownMenuItem onClick={() => setCategoryUser(u)}>
+            <Tags className="w-4 h-4 mr-2" />
+            Categories
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => handleResetPassword(u)}>
+          <KeyRound className="w-4 h-4 mr-2" />
+          Reset Password
+        </DropdownMenuItem>
+        {u.id !== user?.id && (
+          <DropdownMenuItem 
+            className="text-destructive"
+            onClick={() => handleDeleteUser(u)}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -343,8 +394,8 @@ export default function UserManagement() {
               Back to Dashboard
             </Link>
           </Button>
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <UserCog className="h-8 w-8 text-primary" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-3">
+            <UserCog className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             User Management
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -353,7 +404,7 @@ export default function UserManagement() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6">
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
@@ -413,44 +464,43 @@ export default function UserManagement() {
         {/* Filters */}
         <Card className="mb-6">
           <CardContent className="pt-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, email, or department..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+            <div className="flex flex-col gap-4">
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="Search by name, email, or department..."
+                containerClassName="w-full"
+              />
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="w-full sm:w-[150px]">
+                    <SelectValue placeholder="Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="trainer">Trainer</SelectItem>
+                    <SelectItem value="trainee">Trainee</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[150px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="trainer">Trainer</SelectItem>
-                  <SelectItem value="trainee">Trainee</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Users Table */}
+        {/* Users List */}
         <Card>
           <CardHeader>
             <CardTitle>Users ({filteredUsers.length})</CardTitle>
@@ -461,13 +511,70 @@ export default function UserManagement() {
           <CardContent>
             {loadingUsers ? (
               <div className="text-center py-8 text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                 Loading users...
               </div>
             ) : filteredUsers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No users found matching your criteria
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                {searchTerm || roleFilter !== 'all' || statusFilter !== 'all' ? (
+                  <p>No users found matching your criteria</p>
+                ) : (
+                  <p>No users found</p>
+                )}
               </div>
+            ) : isMobile ? (
+              /* Mobile Card View */
+              <MobileCardList>
+                {pagination.paginatedData.map((u) => (
+                  <MobileCardItem key={u.id}>
+                    <MobileCardHeader
+                      title={
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={u.avatar_url || undefined} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                              {getInitials(u.full_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>{u.full_name || 'Unnamed'}</span>
+                        </div>
+                      }
+                      actions={renderUserActions(u)}
+                    />
+                    <MobileCardBody>
+                      {u.email && (
+                        <MobileCardRow
+                          icon={<Mail className="w-4 h-4" />}
+                          label="Email"
+                          value={u.email}
+                        />
+                      )}
+                      {u.department && (
+                        <MobileCardRow
+                          icon={<Building className="w-4 h-4" />}
+                          label="Dept"
+                          value={u.department}
+                        />
+                      )}
+                      <MobileCardRow
+                        label="Role"
+                        value={getRoleBadge(u.role)}
+                      />
+                      <MobileCardRow
+                        label="Status"
+                        value={getStatusBadge(u.status)}
+                      />
+                      <MobileCardRow
+                        label="Joined"
+                        value={new Date(u.created_at).toLocaleDateString()}
+                      />
+                    </MobileCardBody>
+                  </MobileCardItem>
+                ))}
+              </MobileCardList>
             ) : (
+              /* Desktop Table View */
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -482,7 +589,7 @@ export default function UserManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map((u) => (
+                    {pagination.paginatedData.map((u) => (
                       <TableRow key={u.id} className="cursor-pointer hover:bg-muted/50">
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -529,67 +636,7 @@ export default function UserManagement() {
                           {new Date(u.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleEditUser(u)}
-                            >
-                              Edit
-                            </Button>
-                            {u.role === 'trainee' && (
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setCategoryUser(u)}
-                                title="Assign Categories"
-                              >
-                                <Tags className="h-3 w-3" />
-                              </Button>
-                            )}
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleResetPassword(u)}
-                            >
-                              <KeyRound className="h-3 w-3" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  disabled={u.id === user?.id}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete User Permanently</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to permanently delete {u.full_name || u.email}? 
-                                    This action cannot be undone and will remove all their data including 
-                                    attendance records, session participations, and notifications.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteUser(u)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    disabled={deletingUser}
-                                  >
-                                    {deletingUser ? (
-                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    ) : null}
-                                    Delete Permanently
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                          {renderUserActions(u)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -597,12 +644,26 @@ export default function UserManagement() {
                 </Table>
               </div>
             )}
+
+            {/* Pagination */}
+            <DataTablePagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.totalItems}
+              pageSize={pagination.pageSize}
+              startIndex={pagination.startIndex}
+              endIndex={pagination.endIndex}
+              canGoNext={pagination.canGoNext}
+              canGoPrev={pagination.canGoPrev}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
           </CardContent>
         </Card>
 
         {/* Edit User Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit User</DialogTitle>
               <DialogDescription>
@@ -654,7 +715,7 @@ export default function UserManagement() {
 
         {/* Reset Password Dialog */}
         <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Reset Password</DialogTitle>
               <DialogDescription>
@@ -704,7 +765,7 @@ export default function UserManagement() {
                     Resetting...
                   </>
                 ) : (
-              'Reset Password'
+                  'Reset Password'
                 )}
               </Button>
             </DialogFooter>

@@ -1,10 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePagination } from '@/hooks/usePagination';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import {
+  MobileCardList,
+  MobileCardItem,
+  MobileCardHeader,
+  MobileCardBody,
+  MobileCardRow,
+  MobileCardActions,
+} from '@/components/ui/mobile-card-list';
 import {
   Dialog,
   DialogContent,
@@ -46,7 +58,14 @@ import {
   Trash2,
   Edit,
   FolderOpen,
+  MoreVertical,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 
 interface Session {
@@ -86,6 +105,7 @@ interface Category {
 
 export function ParticipantManagement() {
   const { user, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -94,6 +114,7 @@ export function ParticipantManagement() {
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -106,6 +127,20 @@ export function ParticipantManagement() {
   const [newCategoryColor, setNewCategoryColor] = useState('#6366f1');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [savingCategory, setSavingCategory] = useState(false);
+
+  // Filter participants based on search
+  const filteredParticipants = useMemo(() => {
+    if (!participantSearch.trim()) return participants;
+    const term = participantSearch.toLowerCase();
+    return participants.filter(p =>
+      p.full_name?.toLowerCase().includes(term) ||
+      p.email?.toLowerCase().includes(term) ||
+      p.department?.toLowerCase().includes(term)
+    );
+  }, [participants, participantSearch]);
+
+  // Pagination for participants
+  const pagination = usePagination(filteredParticipants, { initialPageSize: 10 });
 
   useEffect(() => {
     fetchSessions();
@@ -157,7 +192,6 @@ export function ParticipantManagement() {
 
       if (error) throw error;
 
-      // Get user counts for each category
       const { data: userCategoryData } = await supabase
         .from('user_categories')
         .select('category_id');
@@ -231,7 +265,6 @@ export function ParticipantManagement() {
     if (!selectedSession) return;
 
     try {
-      // Get all active trainees
       const { data: trainees, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id')
@@ -246,7 +279,6 @@ export function ParticipantManagement() {
         return;
       }
 
-      // Get active profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, email, department')
@@ -255,7 +287,6 @@ export function ParticipantManagement() {
 
       if (profilesError) throw profilesError;
 
-      // Get user categories
       const { data: userCats } = await supabase
         .from('user_categories')
         .select('user_id, category_id, trainee_categories(name)')
@@ -270,7 +301,6 @@ export function ParticipantManagement() {
         userCategoryMap.set(uc.user_id, cats);
       });
 
-      // Filter out already assigned participants
       const assignedIds = new Set(participants.map(p => p.user_id));
       const available: AvailableUser[] = (profiles || [])
         .filter(p => !assignedIds.has(p.id))
@@ -313,7 +343,6 @@ export function ParticipantManagement() {
 
       if (error) throw error;
 
-      // Send notification
       try {
         await supabase.functions.invoke('send-notification', {
           body: {
@@ -376,10 +405,8 @@ export function ParticipantManagement() {
   const selectByCategory = (categoryName: string) => {
     setSelectedCategory(categoryName);
     if (categoryName === 'all') {
-      // Select all available trainees
       setSelectedUsers(new Set(availableUsers.map(u => u.id)));
     } else if (categoryName) {
-      // Select users in the category
       const usersInCategory = availableUsers.filter(u => 
         u.categories.includes(categoryName)
       );
@@ -397,7 +424,6 @@ export function ParticipantManagement() {
     );
   };
 
-  // Category Management
   const handleSaveCategory = async () => {
     if (!newCategoryName.trim()) {
       toast.error('Category name is required');
@@ -469,7 +495,6 @@ export function ParticipantManagement() {
     setIsCategoryDialogOpen(true);
   };
 
-  // CSV Export
   const exportToCSV = () => {
     if (participants.length === 0) {
       toast.error('No participants to export');
@@ -510,9 +535,9 @@ export function ParticipantManagement() {
   const getAttendanceBadge = (status: 'present' | 'late' | 'absent' | null) => {
     switch (status) {
       case 'present':
-        return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" /> Present</Badge>;
+        return <Badge className="bg-primary text-primary-foreground"><CheckCircle className="w-3 h-3 mr-1" /> Present</Badge>;
       case 'late':
-        return <Badge className="bg-amber-500"><Clock className="w-3 h-3 mr-1" /> Late</Badge>;
+        return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Late</Badge>;
       case 'absent':
         return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Absent</Badge>;
       default:
@@ -529,45 +554,69 @@ export function ParticipantManagement() {
   }
 
   const currentSession = sessions.find(s => s.id === selectedSession);
-  const filteredUsers = getFilteredUsers();
+  const filteredAvailableUsers = getFilteredUsers();
+
+  const renderParticipantActions = (p: Participant) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem 
+          className="text-destructive"
+          onClick={() => handleRemoveParticipant(p.id, p.full_name)}
+        >
+          <UserMinus className="w-4 h-4 mr-2" />
+          Remove
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Participant Management</h2>
+    <Card className="p-4 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Participant Management</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsCategoryDialogOpen(true)}>
+              <Tag className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Categories</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportToCSV} disabled={participants.length === 0}>
+              <Download className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+            <Button size="sm" onClick={openAddDialog} disabled={!selectedSession}>
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Select value={selectedSession} onValueChange={setSelectedSession}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select a session" />
-            </SelectTrigger>
-            <SelectContent>
-              {sessions.map(s => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.title} - {new Date(s.scheduled_date).toLocaleDateString()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" onClick={() => setIsCategoryDialogOpen(true)}>
-            <Tag className="w-4 h-4 mr-2" />
-            Categories
-          </Button>
-          <Button variant="outline" onClick={exportToCSV} disabled={participants.length === 0}>
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={openAddDialog} disabled={!selectedSession}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add Participants
-          </Button>
-        </div>
+
+        {/* Session selector */}
+        <Select value={selectedSession} onValueChange={setSelectedSession}>
+          <SelectTrigger className="w-full sm:w-80">
+            <SelectValue placeholder="Select a session" />
+          </SelectTrigger>
+          <SelectContent>
+            {sessions.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.title} - {new Date(s.scheduled_date).toLocaleDateString()}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {currentSession && (
-        <div className="mb-4 p-3 bg-muted rounded-lg flex items-center gap-4">
+        <div className="mb-4 p-3 bg-muted rounded-lg flex flex-wrap items-center gap-2 sm:gap-4">
           <Calendar className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">
             {currentSession.training_title} • {new Date(currentSession.scheduled_date).toLocaleDateString()} at {currentSession.start_time}
@@ -576,64 +625,127 @@ export function ParticipantManagement() {
         </div>
       )}
 
+      {/* Search participants */}
+      {participants.length > 0 && (
+        <div className="mb-4">
+          <SearchInput
+            value={participantSearch}
+            onChange={setParticipantSearch}
+            placeholder="Search participants..."
+            containerClassName="max-w-md"
+          />
+        </div>
+      )}
+
       {!selectedSession ? (
         <div className="text-center py-12 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>Select a session to manage participants</p>
         </div>
-      ) : participants.length === 0 ? (
+      ) : filteredParticipants.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No participants assigned to this session</p>
-          <Button variant="link" onClick={openAddDialog}>
-            Add your first participant
-          </Button>
+          {participantSearch ? (
+            <p>No participants found matching "{participantSearch}"</p>
+          ) : (
+            <>
+              <p>No participants assigned to this session</p>
+              <Button variant="link" onClick={openAddDialog}>
+                Add your first participant
+              </Button>
+            </>
+          )}
         </div>
+      ) : isMobile ? (
+        /* Mobile Card View */
+        <MobileCardList>
+          {pagination.paginatedData.map(p => (
+            <MobileCardItem key={p.id}>
+              <MobileCardHeader
+                title={p.full_name}
+                subtitle={p.email}
+                badge={getAttendanceBadge(p.attendance_status)}
+                actions={renderParticipantActions(p)}
+              />
+              <MobileCardBody>
+                {p.department && (
+                  <MobileCardRow
+                    label="Department"
+                    value={p.department}
+                  />
+                )}
+                <MobileCardRow
+                  label="Assigned"
+                  value={new Date(p.assigned_at).toLocaleDateString()}
+                />
+                {p.join_time && (
+                  <MobileCardRow
+                    icon={<Clock className="w-4 h-4" />}
+                    label="Joined"
+                    value={new Date(p.join_time).toLocaleTimeString()}
+                  />
+                )}
+              </MobileCardBody>
+            </MobileCardItem>
+          ))}
+        </MobileCardList>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Assigned</TableHead>
-              <TableHead>Attendance</TableHead>
-              <TableHead>Join Time</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {participants.map(p => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium text-foreground">{p.full_name}</TableCell>
-                <TableCell className="text-muted-foreground">{p.email}</TableCell>
-                <TableCell className="text-muted-foreground">{p.department || '—'}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(p.assigned_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell>{getAttendanceBadge(p.attendance_status)}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {p.join_time ? new Date(p.join_time).toLocaleTimeString() : '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => handleRemoveParticipant(p.id, p.full_name)}
-                  >
-                    <UserMinus className="w-4 h-4" />
-                  </Button>
-                </TableCell>
+        /* Desktop Table View */
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Assigned</TableHead>
+                <TableHead>Attendance</TableHead>
+                <TableHead>Join Time</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {pagination.paginatedData.map(p => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium text-foreground">{p.full_name}</TableCell>
+                  <TableCell className="text-muted-foreground">{p.email}</TableCell>
+                  <TableCell className="text-muted-foreground">{p.department || '—'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {new Date(p.assigned_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>{getAttendanceBadge(p.attendance_status)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {p.join_time ? new Date(p.join_time).toLocaleTimeString() : '—'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {renderParticipantActions(p)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {filteredParticipants.length > 0 && (
+        <DataTablePagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          startIndex={pagination.startIndex}
+          endIndex={pagination.endIndex}
+          canGoNext={pagination.canGoNext}
+          canGoPrev={pagination.canGoPrev}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       )}
 
       {/* Add Participants Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Participants</DialogTitle>
             <DialogDescription>
@@ -643,7 +755,7 @@ export function ParticipantManagement() {
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="individual">Individual Selection</TabsTrigger>
+              <TabsTrigger value="individual">Individual</TabsTrigger>
               <TabsTrigger value="category">By Category</TabsTrigger>
             </TabsList>
 
@@ -657,7 +769,7 @@ export function ParticipantManagement() {
                   <SelectContent>
                     <SelectItem value="all">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                        <div className="w-3 h-3 rounded-full bg-primary" />
                         All Available Trainees ({availableUsers.length})
                       </div>
                     </SelectItem>
@@ -683,10 +795,10 @@ export function ParticipantManagement() {
                   </p>
                   <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                     {Array.from(selectedUsers).slice(0, 10).map(userId => {
-                      const user = availableUsers.find(u => u.id === userId);
+                      const availUser = availableUsers.find(u => u.id === userId);
                       return (
                         <Badge key={userId} variant="secondary">
-                          {user?.full_name || 'Unknown'}
+                          {availUser?.full_name || 'Unknown'}
                         </Badge>
                       );
                     })}
@@ -699,17 +811,13 @@ export function ParticipantManagement() {
             </TabsContent>
 
             <TabsContent value="individual" className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, email, or department..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+              <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="Search by name, email, or department..."
+              />
 
-              {filteredUsers.length === 0 ? (
+              {filteredAvailableUsers.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   <FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
                   {availableUsers.length === 0 
@@ -721,15 +829,15 @@ export function ParticipantManagement() {
                 <>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
-                      {selectedUsers.size} of {filteredUsers.length} selected
+                      {selectedUsers.size} of {filteredAvailableUsers.length} selected
                     </span>
                     <Button variant="ghost" size="sm" onClick={selectAllFiltered}>
-                      {selectedUsers.size === filteredUsers.length ? 'Deselect All' : 'Select All'}
+                      {selectedUsers.size === filteredAvailableUsers.length ? 'Deselect All' : 'Select All'}
                     </Button>
                   </div>
 
                   <div className="max-h-64 overflow-y-auto border rounded-lg">
-                    {filteredUsers.map(u => (
+                    {filteredAvailableUsers.map(u => (
                       <div
                         key={u.id}
                         className="flex items-center gap-3 p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
@@ -739,15 +847,15 @@ export function ParticipantManagement() {
                           checked={selectedUsers.has(u.id)}
                           onCheckedChange={() => toggleUserSelection(u.id)}
                         />
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">{u.full_name || 'Unnamed'}</p>
-                          <p className="text-sm text-muted-foreground">{u.email}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground truncate">{u.full_name || 'Unnamed'}</p>
+                          <p className="text-sm text-muted-foreground truncate">{u.email}</p>
                           {u.department && (
                             <p className="text-xs text-muted-foreground">{u.department}</p>
                           )}
                         </div>
                         {u.categories.length > 0 && (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-shrink-0">
                             {u.categories.slice(0, 2).map(cat => (
                               <Badge key={cat} variant="outline" className="text-xs">
                                 {cat}
@@ -787,7 +895,7 @@ export function ParticipantManagement() {
           setNewCategoryColor('#6366f1');
         }
       }}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>
             <DialogDescription>
@@ -871,19 +979,19 @@ export function ParticipantManagement() {
                 <div className="max-h-48 overflow-y-auto space-y-2">
                   {categories.map(cat => (
                     <div key={cat.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div 
-                          className="w-4 h-4 rounded-full" 
+                          className="w-4 h-4 rounded-full flex-shrink-0" 
                           style={{ backgroundColor: cat.color }}
                         />
-                        <div>
-                          <p className="font-medium text-sm">{cat.name}</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{cat.name}</p>
                           {cat.description && (
-                            <p className="text-xs text-muted-foreground">{cat.description}</p>
+                            <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Badge variant="secondary" className="text-xs">
                           {cat.user_count} users
                         </Badge>

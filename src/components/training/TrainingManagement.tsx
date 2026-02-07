@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePagination } from '@/hooks/usePagination';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import {
+  MobileCardList,
+  MobileCardItem,
+  MobileCardHeader,
+  MobileCardBody,
+  MobileCardRow,
+  MobileCardActions,
+} from '@/components/ui/mobile-card-list';
 import {
   Dialog,
   DialogContent,
@@ -48,12 +60,27 @@ import { TrainingForm } from './TrainingForm';
 
 export function TrainingManagement() {
   const { user, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTraining, setEditingTraining] = useState<Training | null>(null);
   const [deletingTraining, setDeletingTraining] = useState<Training | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter trainings based on search
+  const filteredTrainings = useMemo(() => {
+    if (!searchTerm.trim()) return trainings;
+    const term = searchTerm.toLowerCase();
+    return trainings.filter(t =>
+      t.title.toLowerCase().includes(term) ||
+      t.description?.toLowerCase().includes(term)
+    );
+  }, [trainings, searchTerm]);
+
+  // Pagination
+  const pagination = usePagination(filteredTrainings, { initialPageSize: 10 });
 
   useEffect(() => {
     fetchTrainings();
@@ -184,6 +211,15 @@ export function TrainingManagement() {
     setIsFormOpen(false);
   };
 
+  const formatDateRange = (training: Training) => {
+    if (training.start_date && training.end_date) {
+      return `${new Date(training.start_date).toLocaleDateString()} - ${new Date(training.end_date).toLocaleDateString()}`;
+    } else if (training.start_date) {
+      return `From ${new Date(training.start_date).toLocaleDateString()}`;
+    }
+    return 'No dates set';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -192,107 +228,165 @@ export function TrainingManagement() {
     );
   }
 
+  const renderTrainingActions = (training: Training) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => openEditForm(training)}>
+          <Pencil className="w-4 h-4 mr-2" />
+          Edit
+        </DropdownMenuItem>
+        {isAdmin && (
+          <DropdownMenuItem 
+            className="text-destructive"
+            onClick={() => setDeletingTraining(training)}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <Card className="p-4 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-2">
           <GraduationCap className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Training Programs</h2>
         </div>
-        <Button onClick={openCreateForm}>
+        <Button onClick={openCreateForm} className="w-full sm:w-auto">
           <PlusCircle className="w-4 h-4 mr-2" />
           New Training
         </Button>
       </div>
 
-      {trainings.length === 0 ? (
+      {/* Search */}
+      <div className="mb-4">
+        <SearchInput
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search trainings..."
+          containerClassName="max-w-md"
+        />
+      </div>
+
+      {filteredTrainings.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <GraduationCap className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No training programs yet</p>
-          <Button variant="link" onClick={openCreateForm}>
-            Create your first training program
-          </Button>
+          {searchTerm ? (
+            <p>No trainings found matching "{searchTerm}"</p>
+          ) : (
+            <>
+              <p>No training programs yet</p>
+              <Button variant="link" onClick={openCreateForm}>
+                Create your first training program
+              </Button>
+            </>
+          )}
         </div>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {trainings.map((training) => (
-              <TableRow key={training.id}>
-                <TableCell>
-                  <div>
-                    <p className="font-medium text-foreground">{training.title}</p>
-                    {training.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-1">
-                        {training.description}
-                      </p>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                    {training.start_date && training.end_date ? (
-                      <span>
-                        {new Date(training.start_date).toLocaleDateString()} - {new Date(training.end_date).toLocaleDateString()}
-                      </span>
-                    ) : training.start_date ? (
-                      <span>From {new Date(training.start_date).toLocaleDateString()}</span>
-                    ) : (
-                      <span>No dates set</span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
+      ) : isMobile ? (
+        /* Mobile Card View */
+        <MobileCardList>
+          {pagination.paginatedData.map((training) => (
+            <MobileCardItem key={training.id}>
+              <MobileCardHeader
+                title={training.title}
+                subtitle={training.description}
+                badge={
                   <Badge variant={training.is_active ? 'default' : 'secondary'}>
                     {training.is_active ? 'Active' : 'Inactive'}
                   </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(training.created_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditForm(training)}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      {/* Only admins can delete training programs */}
-                      {isAdmin && (
-                        <DropdownMenuItem 
-                          className="text-destructive"
-                          onClick={() => setDeletingTraining(training)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                }
+                actions={renderTrainingActions(training)}
+              />
+              <MobileCardBody>
+                <MobileCardRow
+                  icon={<Calendar className="w-4 h-4" />}
+                  label="Duration"
+                  value={formatDateRange(training)}
+                />
+                <MobileCardRow
+                  label="Created"
+                  value={new Date(training.created_at).toLocaleDateString()}
+                />
+              </MobileCardBody>
+            </MobileCardItem>
+          ))}
+        </MobileCardList>
+      ) : (
+        /* Desktop Table View */
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {pagination.paginatedData.map((training) => (
+                <TableRow key={training.id}>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-foreground">{training.title}</p>
+                      {training.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-1">
+                          {training.description}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Calendar className="w-4 h-4" />
+                      <span>{formatDateRange(training)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={training.is_active ? 'default' : 'secondary'}>
+                      {training.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(training.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {renderTrainingActions(training)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
+
+      {/* Pagination */}
+      <DataTablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        pageSize={pagination.pageSize}
+        startIndex={pagination.startIndex}
+        endIndex={pagination.endIndex}
+        canGoNext={pagination.canGoNext}
+        canGoPrev={pagination.canGoPrev}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+      />
 
       {/* Create/Edit Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTraining ? 'Edit Training Program' : 'Create Training Program'}

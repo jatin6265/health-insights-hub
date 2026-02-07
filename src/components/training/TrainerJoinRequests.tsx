@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePagination } from '@/hooks/usePagination';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import {
+  MobileCardList,
+  MobileCardItem,
+  MobileCardHeader,
+  MobileCardBody,
+  MobileCardRow,
+  MobileCardActions,
+} from '@/components/ui/mobile-card-list';
 import {
   Calendar,
   Clock,
@@ -31,10 +43,6 @@ interface JoinRequest {
   partial_threshold_minutes: number;
 }
 
-/**
- * Calculate attendance type based on timing
- * Uses the original request timestamp, NOT approval time
- */
 function calculateAttendanceType(
   requestedAt: Date,
   sessionStart: Date,
@@ -55,9 +63,25 @@ function calculateAttendanceType(
 
 export function TrainerJoinRequests() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter requests based on search
+  const filteredRequests = useMemo(() => {
+    if (!searchTerm.trim()) return requests;
+    const term = searchTerm.toLowerCase();
+    return requests.filter(r =>
+      r.trainee_name?.toLowerCase().includes(term) ||
+      r.trainee_email?.toLowerCase().includes(term) ||
+      r.session_title.toLowerCase().includes(term)
+    );
+  }, [requests, searchTerm]);
+
+  // Pagination
+  const pagination = usePagination(filteredRequests, { initialPageSize: 10 });
 
   useEffect(() => {
     if (user) {
@@ -93,7 +117,6 @@ export function TrainerJoinRequests() {
     if (!user) return;
 
     try {
-      // Get sessions where current user is trainer
       const { data: trainerSessions, error: sessionsError } = await supabase
         .from('sessions')
         .select('id, title, scheduled_date, start_time, late_threshold_minutes, partial_threshold_minutes')
@@ -111,7 +134,6 @@ export function TrainerJoinRequests() {
       const sessionIds = trainerSessions.map(s => s.id);
       const sessionMap = new Map(trainerSessions.map(s => [s.id, s]));
 
-      // Get pending join requests for these sessions
       const { data: pendingRequests, error: requestsError } = await supabase
         .from('join_requests')
         .select('*')
@@ -127,7 +149,6 @@ export function TrainerJoinRequests() {
         return;
       }
 
-      // Get trainee profiles
       const userIds = pendingRequests.map(r => r.user_id);
       const { data: profiles } = await supabase
         .from('profiles')
@@ -232,7 +253,6 @@ export function TrainerJoinRequests() {
     });
   };
 
-  // Calculate what the attendance type would be if approved now
   const getExpectedType = (request: JoinRequest): 'on_time' | 'late' | 'partial' => {
     const requestedAt = new Date(request.requested_at);
     const sessionStart = new Date(`${request.session_date}T${request.session_start_time}+00:00`);
@@ -257,7 +277,7 @@ export function TrainerJoinRequests() {
 
   if (loading) {
     return (
-      <Card className="p-6">
+      <Card className="p-4 sm:p-6">
         <div className="flex items-center justify-center h-32">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
@@ -265,9 +285,42 @@ export function TrainerJoinRequests() {
     );
   }
 
+  const renderRequestActions = (request: JoinRequest) => (
+    <div className="flex gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => handleReject(request)}
+        disabled={processing === request.id}
+        className="text-destructive hover:bg-destructive/10"
+      >
+        {processing === request.id ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <X className="w-4 h-4" />
+        )}
+      </Button>
+      <Button
+        size="sm"
+        onClick={() => handleApprove(request)}
+        disabled={processing === request.id}
+        className="bg-primary hover:bg-primary/90"
+      >
+        {processing === request.id ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            <Check className="w-4 h-4 mr-1" />
+            <span className="hidden sm:inline">Approve</span>
+          </>
+        )}
+      </Button>
+    </div>
+  );
+
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
+    <Card className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2">
           <Bell className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Attendance Requests</h2>
@@ -277,14 +330,70 @@ export function TrainerJoinRequests() {
         )}
       </div>
 
-      {requests.length === 0 ? (
+      {/* Search */}
+      {requests.length > 0 && (
+        <div className="mb-4">
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search by trainee or session..."
+            containerClassName="max-w-md"
+          />
+        </div>
+      )}
+
+      {filteredRequests.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No pending attendance requests</p>
+          {searchTerm ? (
+            <p>No requests found matching "{searchTerm}"</p>
+          ) : (
+            <p>No pending attendance requests</p>
+          )}
         </div>
+      ) : isMobile ? (
+        /* Mobile Card View */
+        <MobileCardList>
+          {pagination.paginatedData.map((request) => {
+            const expectedType = getExpectedType(request);
+            return (
+              <MobileCardItem key={request.id}>
+                <MobileCardHeader
+                  title={request.trainee_name || 'Unknown Trainee'}
+                  subtitle={request.trainee_email}
+                  badge={getTypeBadge(expectedType)}
+                />
+                <MobileCardBody>
+                  <MobileCardRow
+                    label="Session"
+                    value={request.session_title}
+                  />
+                  <MobileCardRow
+                    icon={<Calendar className="w-4 h-4" />}
+                    label="Date"
+                    value={formatDate(request.session_date)}
+                  />
+                  <MobileCardRow
+                    icon={<Clock className="w-4 h-4" />}
+                    label="Time"
+                    value={request.session_time}
+                  />
+                  <MobileCardRow
+                    label="Requested"
+                    value={formatTime(request.requested_at)}
+                  />
+                </MobileCardBody>
+                <MobileCardActions>
+                  {renderRequestActions(request)}
+                </MobileCardActions>
+              </MobileCardItem>
+            );
+          })}
+        </MobileCardList>
       ) : (
+        /* Desktop List View */
         <div className="space-y-4">
-          {requests.map((request) => {
+          {pagination.paginatedData.map((request) => {
             const expectedType = getExpectedType(request);
             return (
               <div
@@ -320,41 +429,28 @@ export function TrainerJoinRequests() {
                     </p>
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleReject(request)}
-                      disabled={processing === request.id}
-                      className="text-destructive hover:bg-destructive/10"
-                    >
-                      {processing === request.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <X className="w-4 h-4" />
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(request)}
-                      disabled={processing === request.id}
-                      className="bg-primary hover:bg-primary/90"
-                    >
-                      {processing === request.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          Approve Attendance
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  {renderRequestActions(request)}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Pagination */}
+      {filteredRequests.length > 0 && (
+        <DataTablePagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          startIndex={pagination.startIndex}
+          endIndex={pagination.endIndex}
+          canGoNext={pagination.canGoNext}
+          canGoPrev={pagination.canGoPrev}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       )}
     </Card>
   );
